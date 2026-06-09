@@ -1,4 +1,4 @@
-# FastAPI Users — Design Document
+# AsyncPulse — Design Document
 
 > A Python async REST API for user management, built as a learning bridge from
 > NestJS/TypeScript to modern Python backend development.
@@ -506,7 +506,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="FastAPI Users",
+    title="AsyncPulse",
     version="0.1.0",
     lifespan=lifespan,
 )
