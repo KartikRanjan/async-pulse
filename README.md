@@ -65,7 +65,7 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 
 # Run
-uvicorn src.main:app --reload
+fastapi dev src/main.py
 
 # Docs
 open http://localhost:8000/docs
