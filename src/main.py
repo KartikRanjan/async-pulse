@@ -1,29 +1,19 @@
-"""
-Main application entry point for async-pulse.
-"""
+"""Application entry point.
 
-from contextlib import asynccontextmanager
+Creates the FastAPI app, registers middleware, exception handlers,
+and mounts the versioned API router.
+"""
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.router import api_router
-from src.config.database import engine
-from src.config.settings import get_settings
-from src.core.exceptions import AppError, app_error_handler
-from src.db.base import Base
+from src.core.exception_handlers import app_error_handler
+from src.core.lifespan import lifespan
+from src.core.middleware import add_cors_middleware
+from src.core.settings import get_settings
+from src.shared.exceptions import AppError
 
 settings = get_settings()
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Create tables on startup (dev convenience)."""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    yield
-    await engine.dispose()
-
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -31,22 +21,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# ── Middleware ────────────────────────────────────────────
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# ── Middleware ─────────────────────────────────────────────
+add_cors_middleware(app)
 
-# ── Error handlers ──────────────────────────────────────
-app.add_exception_handler(AppError, app_error_handler)
+# ── Exception handlers ────────────────────────────────────
+app.add_exception_handler(AppError, app_error_handler)  # type: ignore[arg-type]
 
-# ── Routes ──────────────────────────────────────────────
-app.include_router(api_router, prefix=settings.API_V1_PREFIX)
-
-
-@app.get("/health", tags=["Health"])
-async def health():
-    return {"status": "ok"}
+# ── Routes ────────────────────────────────────────────────
+app.include_router(api_router)

@@ -1,11 +1,9 @@
-"""
-Declarative base for all SQLAlchemy models.
-"""
+"""SQLAlchemy declarative base."""
 
 from sqlalchemy.orm import DeclarativeBase
 
 
 class Base(DeclarativeBase):
-    """Base class — import all models so Alembic / metadata sees them."""
+    """Single declarative base — all models inherit from this."""
 
     pass
