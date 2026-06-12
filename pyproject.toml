@@ -5,19 +5,28 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "async-pulse"
 version = "0.1.0"
-description = "Async pulse project"
-requires-python = ">=3.8"
+description = "Modular async backend API with auth & user management"
+requires-python = ">=3.11"
 dependencies = [
     "fastapi[standard]",
+    "pydantic[email]",
+    "pydantic-settings",
+    "sqlalchemy[asyncio]",
+    "aiosqlite",
+    "passlib[bcrypt]",
+    "python-jose[cryptography]",
+    "uvicorn[standard]",
 ]
 
 [project.optional-dependencies]
 dev = [
+    "pytest",
+    "pytest-asyncio",
+    "httpx",
     "black",
-    "flake8",
-    "autopep8",
     "isort",
     "mypy",
+    "ruff",
 ]
 
 [tool.black]
