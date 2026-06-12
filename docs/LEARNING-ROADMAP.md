@@ -67,7 +67,7 @@ or `httpx.AsyncClient`, compare timing to sequential requests.
 **Practice:** Create `get_db()` dependency that yields a mock session. Use it in a route.
 
 ### 2.3 APIRouter & Project Structure
-- [ ] `APIRouter(prefix="/api/v1/users", tags=["users"])`
+- [ ] `APIRouter(prefix="/users", tags=["users"])` (version prefix added by aggregator)
 - [ ] `app.include_router(router)` — modular routing
 - [ ] File structure: `router.py`, `service.py`, `repository.py`
 - [ ] Separation of concerns: routes → service → repository
@@ -86,31 +86,35 @@ or `httpx.AsyncClient`, compare timing to sequential requests.
 
 ## Phase 3: Database Layer
 
-### 3.1 SQLModel + SQLAlchemy Basics
-- [ ] `SQLModel` — table + Pydantic model in one class
-- [ ] `Field(primary_key=True, unique=True, index=True)`
+### 3.1 SQLAlchemy 2.0 ORM Basics
+- [ ] `DeclarativeBase` + `Mapped` / `mapped_column` typed models
+- [ ] Persistence model vs domain entity — why they're separate
+- [ ] `mapped_column(primary_key=True, unique=True, index=True)`
 - [ ] Relationships (one-to-many, many-to-many) — defer to Phase 6
 - [ ] `select()`, `.where()`, `.offset()`, `.limit()`
-- [ ] `session.exec()` vs `session.execute()`
+- [ ] `session.execute()` + `.scalar_one_or_none()` / `.scalars().all()`
 
-**Practice:** Define `User` model, create a script that inserts and queries a user.
+**Practice:** Define `UserModel`, create a script that inserts and queries a user.
 
 ### 3.2 Async SQLAlchemy Sessions
 - [ ] `create_async_engine("postgresql+asyncpg://...")`
-- [ ] `AsyncSession` — async context manager
+- [ ] `async_sessionmaker` + `AsyncSession`
 - [ ] `get_async_session()` as a FastAPI dependency (yield)
-- [ ] `await session.exec(select(User).where(...))`
-- [ ] `session.add()`, `session.commit()`, `session.refresh()`
+- [ ] `await session.execute(select(UserModel).where(...))`
+- [ ] `session.add()`, `session.flush()`, `session.refresh()`
 
 **Practice:** Wire up a real PostgreSQL DB (Docker), query users from a FastAPI route.
 
-### 3.3 Repository Pattern
+### 3.3 Repository + Domain Entity + Unit of Work
 - [ ] Why repository — abstract DB access from business logic
 - [ ] `UserRepository` class with `__init__(self, session: AsyncSession)`
-- [ ] CRUD methods: `get_by_id()`, `get_by_email()`, `create()`, `update()`
+- [ ] Map persistence model ↔ domain entity (`_to_entity`)
+- [ ] Domain entity holds behavior (`deactivate()`, `verify_password()`)
+- [ ] Unit of Work owns commit/rollback — repositories never commit
 - [ ] Pagination: `offset/limit` + total count
 
-**Practice:** Implement full `UserRepository` with all CRUD operations.
+**Practice:** Implement `UserRepository` (returns entities) + a `UnitOfWork`, and
+have the service commit through the UoW.
 
 ### 3.4 Alembic Migrations
 - [ ] `alembic init`, configure `env.py` for async
@@ -200,7 +204,7 @@ or `httpx.AsyncClient`, compare timing to sequential requests.
 
 ## Phase 6: Advanced Topics (after basics work)
 
-### 6.1 SQLModel Relationships
+### 6.1 SQLAlchemy Relationships
 - [ ] One-to-many: `User` has many `Post`
 - [ ] Many-to-many: `User` ↔ `Role`
 - [ ] `sa_relationship()` with `back_populates`
@@ -259,7 +263,8 @@ or `httpx.AsyncClient`, compare timing to sequential requests.
 ```bash
 # Dev setup
 python -m venv .venv && source .venv/bin/activate
-pip install fastapi uvicorn sqlmodel asyncpg python-jose passlib bcrypt httpx
+pip install fastapi uvicorn sqlalchemy asyncpg python-jose passlib bcrypt httpx
+pip install structlog prometheus-client opentelemetry-sdk arq redis
 pip install -e ".[dev]"  # pytest, ruff, mypy
 
 # Run server
