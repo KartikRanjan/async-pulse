@@ -27,7 +27,8 @@ class UserService:
     @property
     def repo(self) -> UserRepository:
         """Shortcut to the user repository on the current UoW."""
-        assert self.uow.users is not None
+        if self.uow.users is None:
+            raise RuntimeError("UserService.repo accessed before UnitOfWork was entered")
         return self.uow.users
 
     # ── Commands ──────────────────────────────────────────

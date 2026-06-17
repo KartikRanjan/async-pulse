@@ -6,7 +6,9 @@ All domain exceptions are caught by the central handler in
 
 from fastapi import APIRouter, Depends
 
+from src.modules.auth.dependencies import get_current_user
 from src.modules.users.dependencies import get_user_service
+from src.modules.users.entities import User
 from src.modules.users.schemas import UserCreate, UserRead, UserUpdate
 from src.modules.users.service import UserService
 from src.shared.pagination import PagedResponse, PageParams
@@ -64,9 +66,10 @@ async def update_user(
     user_id: str,
     payload: UserUpdate,
     service: UserService = Depends(get_user_service),
+    current_user: User = Depends(get_current_user),
 ) -> SuccessResponse[UserRead]:
     """Update a user."""
-    user = await service.update_user(user_id, payload)
+    user = await service.update_user(user_id, payload, current_user_id=current_user.id)
     return SuccessResponse(
         data=UserRead.model_validate(user),
         message="User updated successfully",
@@ -80,4 +83,3 @@ async def delete_user(
 ) -> None:
     """Delete a user."""
     await service.delete_user(user_id)
-

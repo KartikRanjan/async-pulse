@@ -107,6 +107,7 @@ async def test_get_user_not_found(client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_update_user(client: AsyncClient) -> None:
     """PATCH /api/v1/users/{id} — should update and return the user wrapped in SuccessResponse."""
+    # Create user
     create_resp = await client.post(
         "/api/v1/users/",
         json={
@@ -117,9 +118,18 @@ async def test_update_user(client: AsyncClient) -> None:
     )
     user_id = create_resp.json()["data"]["id"]
 
+    # Login to get access token
+    login_resp = await client.post(
+        "/api/v1/auth/login",
+        json={"email": "dave@example.com", "password": "securepass123"},
+    )
+    token = login_resp.json()["data"]["access_token"]
+
+    # Update with auth
     response = await client.patch(
         f"/api/v1/users/{user_id}",
         json={"username": "david"},
+        headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 200
     res_body = response.json()
@@ -147,5 +157,3 @@ async def test_delete_user(client: AsyncClient) -> None:
     # Verify deleted
     get_resp = await client.get(f"/api/v1/users/{user_id}")
     assert get_resp.status_code == 404
-
-

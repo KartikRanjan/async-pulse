@@ -10,6 +10,13 @@ from typing import Any
 from pydantic import AliasGenerator, BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
+# ── Shared config ─────────────────────────────────────────
+
+_RESPONSE_CONFIG = ConfigDict(
+    alias_generator=AliasGenerator(serialization_alias=to_camel),
+    populate_by_name=True,
+)
+
 
 # ── Response models ──────────────────────────────────────
 
@@ -17,10 +24,7 @@ from pydantic.alias_generators import to_camel
 class SuccessResponse[T](BaseModel):
     """Envelope for successful responses."""
 
-    model_config = ConfigDict(
-        alias_generator=AliasGenerator(serialization_alias=to_camel),
-        populate_by_name=True,
-    )
+    model_config = _RESPONSE_CONFIG
 
     success: bool = True
     message: str
@@ -33,10 +37,7 @@ class SuccessResponse[T](BaseModel):
 class ErrorResponse(BaseModel):
     """Envelope for error responses."""
 
-    model_config = ConfigDict(
-        alias_generator=AliasGenerator(serialization_alias=to_camel),
-        populate_by_name=True,
-    )
+    model_config = _RESPONSE_CONFIG
 
     success: bool = False
     message: str

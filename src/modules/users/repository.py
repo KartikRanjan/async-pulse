@@ -8,7 +8,7 @@ Never commits — transaction boundaries are managed by the Unit of Work.
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.users.entities import User
@@ -65,8 +65,6 @@ class UserRepository:
 
     async def get_by_email_or_username(self, email: str, username: str) -> User | None:
         """Check if a user exists with the given email *or* username (single query)."""
-        from sqlalchemy import or_
-
         result = await self.session.execute(
             select(UserModel).where(or_(UserModel.email == email, UserModel.username == username)),
         )
