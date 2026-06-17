@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException
 from src.api.router import api_router
 from src.core.exception_handlers import app_error_handler, http_exception_handler
 from src.core.lifespan import lifespan
-from src.core.middleware import Enhanced404Middleware, add_cors_middleware
+from src.core.middleware import add_cors_middleware
 from src.core.settings import get_settings
 from src.shared.exceptions import AppError
 
@@ -23,11 +23,10 @@ app = FastAPI(
 
 # ── Middleware ─────────────────────────────────────────────
 add_cors_middleware(app)
-app.add_middleware(Enhanced404Middleware)
 
 # ── Exception handlers ────────────────────────────────────
-app.add_exception_handler(AppError, app_error_handler)
-app.add_exception_handler(HTTPException, http_exception_handler)
+app.add_exception_handler(AppError, app_error_handler)  # type: ignore[reportArgumentType]
+app.add_exception_handler(HTTPException, http_exception_handler)  # type: ignore[reportArgumentType]
 
 # ── Routes ────────────────────────────────────────────────
 app.include_router(api_router)

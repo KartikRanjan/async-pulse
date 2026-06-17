@@ -1,44 +1,42 @@
-"""API Response Utility.
+"""Standardized API response envelopes.
 
-Pure factory functions and Pydantic models that return a standardized response shape.
-The structure follows:
-- Success: { success: true, message: str, data: T, timestamp: str }
-- Error: { success: false, message: str, errorCode: str, errors: list[Any], timestamp: str }
+Factories mirror the TypeScript response helpers — every endpoint returns
+a consistent ``{ success, message, data }`` (or error) shape.
 """
 
 from datetime import UTC, datetime
-from typing import Any, TypeVar
+from typing import Any
 
 from pydantic import AliasGenerator, BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
-T = TypeVar("T")
+
+# ── Response models ──────────────────────────────────────
 
 
-class BaseResponse(BaseModel):
-    """Base response model configuration."""
+class SuccessResponse[T](BaseModel):
+    """Envelope for successful responses."""
 
     model_config = ConfigDict(
-        alias_generator=AliasGenerator(
-            serialization_alias=to_camel,
-        ),
+        alias_generator=AliasGenerator(serialization_alias=to_camel),
         populate_by_name=True,
     )
 
-
-class SuccessResponse[T](BaseResponse):
-    """Standard success response envelope."""
-
     success: bool = True
-    message: str = "Operation successful"
+    message: str
     data: T
     timestamp: str = Field(
         default_factory=lambda: datetime.now(UTC).isoformat().replace("+00:00", "Z")
     )
 
 
-class ErrorResponse(BaseResponse):
-    """Standard error response envelope."""
+class ErrorResponse(BaseModel):
+    """Envelope for error responses."""
+
+    model_config = ConfigDict(
+        alias_generator=AliasGenerator(serialization_alias=to_camel),
+        populate_by_name=True,
+    )
 
     success: bool = False
     message: str
@@ -49,7 +47,7 @@ class ErrorResponse(BaseResponse):
     )
 
 
-def success_response[T](data: T, message: str = "Operation successful") -> dict[str, Any]:
+def success_response(data: object, message: str = "Operation successful") -> dict[str, Any]:
     """Build a success response (matches TypeScript factory)."""
     return SuccessResponse(data=data, message=message).model_dump(by_alias=True)
 
@@ -68,4 +66,3 @@ def error_response(
         error_code=error_code,
         errors=errors_to_include,
     ).model_dump(by_alias=True, exclude_none=True)
-

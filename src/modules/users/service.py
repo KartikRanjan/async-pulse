@@ -8,7 +8,11 @@ from typing import Any
 
 from src.db.unit_of_work import UnitOfWork
 from src.modules.users.entities import User
-from src.modules.users.exceptions import UserAlreadyExistsError, UserNotFoundError
+from src.modules.users.exceptions import (
+    UserAlreadyExistsError,
+    UserDeactivationError,
+    UserNotFoundError,
+)
 from src.modules.users.repository import UserRepository
 from src.modules.users.schemas import UserCreate, UserUpdate
 from src.shared.security import hash_password
@@ -30,9 +34,10 @@ class UserService:
 
     async def create_user(self, payload: UserCreate) -> User:
         """Register a new user. Raises ``UserAlreadyExistsError`` on conflict."""
-        if await self.repo.get_by_email(payload.email):
-            raise UserAlreadyExistsError("A user with this email already exists")
-        if await self.repo.get_by_username(payload.username):
+        existing = await self.repo.get_by_email_or_username(payload.email, payload.username)
+        if existing:
+            if existing.email == payload.email:
+                raise UserAlreadyExistsError("A user with this email already exists")
             raise UserAlreadyExistsError("A user with this username already exists")
 
         user = await self.repo.create(
@@ -54,7 +59,13 @@ class UserService:
         """Return a paginated list of users and total count."""
         return await self.repo.list_users(offset, limit)
 
-    async def update_user(self, user_id: str, payload: UserUpdate) -> User:
+    async def update_user(
+        self,
+        user_id: str,
+        payload: UserUpdate,
+        *,
+        current_user_id: str | None = None,
+    ) -> User:
         """Update a user's fields. Raises ``UserNotFoundError`` if missing."""
         user = await self.repo.get_by_id(user_id)
         if not user:
@@ -74,6 +85,8 @@ class UserService:
         if payload.password is not None:
             update_fields["hashed_password"] = hash_password(payload.password)
         if payload.is_active is not None:
+            if current_user_id and user_id == current_user_id and not payload.is_active:
+                raise UserDeactivationError()
             update_fields["is_active"] = payload.is_active
 
         if update_fields:

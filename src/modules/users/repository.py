@@ -63,6 +63,16 @@ class UserRepository:
         model = result.scalar_one_or_none()
         return self._to_entity(model) if model else None
 
+    async def get_by_email_or_username(self, email: str, username: str) -> User | None:
+        """Check if a user exists with the given email *or* username (single query)."""
+        from sqlalchemy import or_
+
+        result = await self.session.execute(
+            select(UserModel).where(or_(UserModel.email == email, UserModel.username == username)),
+        )
+        model = result.scalar_one_or_none()
+        return self._to_entity(model) if model else None
+
     async def list_users(self, offset: int, limit: int) -> tuple[list[User], int]:
         """Return a paginated list of users and the total count."""
         count_result = await self.session.execute(select(func.count()).select_from(UserModel))

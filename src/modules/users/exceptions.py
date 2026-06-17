@@ -9,6 +9,7 @@ from src.shared.exceptions import (
     AuthorizationError,
     ConflictError,
     NotFoundError,
+    ValidationError,
 )
 
 
@@ -32,3 +33,10 @@ class InvalidCredentialsError(AuthenticationError):
 
 class InsufficientPermissionsError(AuthorizationError):
     """Raised when the authenticated user lacks required permissions."""
+
+
+class UserDeactivationError(ValidationError):
+    """Raised when a user tries to deactivate their own account."""
+
+    def __init__(self) -> None:
+        super().__init__("Cannot deactivate your own account")

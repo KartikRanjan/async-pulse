@@ -43,14 +43,3 @@ class UserUpdate(BaseModel):
     username: str | None = Field(default=None, min_length=3, max_length=100)
     password: str | None = Field(default=None, min_length=8)
     is_active: bool | None = None
-
-
-# ── Internal schemas (shared between layers) ──────────────
-
-
-class _UserCreateInternal(BaseModel):
-    """Internal DTO passed from service to repository."""
-
-    email: str
-    username: str
-    hashed_password: str

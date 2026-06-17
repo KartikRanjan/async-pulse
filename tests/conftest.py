@@ -27,7 +27,6 @@ test_session_factory = async_sessionmaker(
 # ── Database fixtures ─────────────────────────────────────
 
 
-
 @pytest.fixture
 async def db_session() -> AsyncGenerator[AsyncSession, None]:
     """Yield a fresh database session and roll back after the test."""
@@ -57,4 +56,3 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
         yield ac
 
     app.dependency_overrides.clear()
-
