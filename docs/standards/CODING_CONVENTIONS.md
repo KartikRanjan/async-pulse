@@ -6,7 +6,7 @@ codifies the design in `../architecture/DESIGN.md` into day-to-day rules and fol
 widely adopted Python standards — [PEP 8](https://peps.python.org/pep-0008/),
 [PEP 257](https://peps.python.org/pep-0257/) (docstrings), and
 [PEP 484](https://peps.python.org/pep-0484/) (type hints) — enforced by `ruff`
-and `mypy`.
+and `pyright`.
 
 ---
 
@@ -443,7 +443,7 @@ Benefits:
 - Schema-driven typing
 - No duplicate DTO definitions
 - Auto-generated OpenAPI documentation
-- Strong static typing under `mypy --strict`
+- Strong static typing under `pyright`
 
 ---
 
@@ -868,7 +868,7 @@ session, client) live in `tests/conftest.py`.
 ## 19. Code Style & Tooling (PEP 8 + PEP 484)
 
 Style is enforced automatically — `ruff` for linting/formatting/import-sorting and
-`mypy` in strict mode for typing. Run them before committing.
+`pyright` in strict mode for typing. Run them before committing.
 
 - **Line length:** follow the configured limit (88, Black/ruff default).
 - **Indentation:** 4 spaces, never tabs.
@@ -916,7 +916,7 @@ Key architectural decisions:
 - Unit of Work owns transaction boundaries; repositories only flush
 - Structured logging (structlog), metrics (prometheus-client), and tracing (OTel)
   all use module-level singletons — never constructor-injected
-- PEP 8 / PEP 257 / PEP 484 enforced by `ruff` + `mypy --strict`
+- PEP 8 / PEP 257 / PEP 484 enforced by `ruff` + `pyright`
 
 These conventions keep the codebase scalable, maintainable, and easy to onboard
 into.

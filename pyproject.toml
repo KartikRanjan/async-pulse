@@ -1,31 +1,115 @@
-[build-system]
-requires = ["setuptools>=61.0", "wheel"]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "async-pulse"
 version = "0.1.0"
-description = "Async pulse project"
-requires-python = ">=3.8"
+description = "Async Pulse API — feature-first modular FastAPI backend"
+requires-python = ">=3.12"
 dependencies = [
-    "fastapi[standard]",
+    "fastapi>=0.115.0",
+    "pydantic[email]>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "sqlalchemy[asyncio]>=2.0.0",
+    "aiosqlite>=0.20.0",
+    "uvicorn[standard]>=0.30.0",
+    "python-jose[cryptography]>=3.3.0",
+    "bcrypt>=4.0.0",
+    "structlog>=24.0.0",
+    "python-multipart>=0.0.12",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "black",
-    "flake8",
-    "autopep8",
-    "isort",
-    "mypy",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "httpx>=0.27.0",
+    "ruff>=0.4.0",
+    "pyright>=1.1.0",
+]
+test = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "httpx>=0.27.0",
+    "aiosqlite>=0.20.0",
+]
+lint = [
+    "ruff>=0.4.0",
+    "pyright>=1.1.0",
 ]
 
-[tool.black]
-line-length = 88
-target-version = ['py38']
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
 
-[tool.isort]
-profile = "black"
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
 
-[tool.mypy]
-strict = true
+# ── Ruff ──────────────────────────────────────────────────
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "N",    # pep8-naming
+    "UP",   # pyupgrade
+    "S",    # flake8-bandit (security)
+    "B",    # flake8-bugbear
+    "A",    # flake8-builtins
+    "C4",   # flake8-comprehensions
+    "SIM",  # flake8-simplify
+    "TC",   # flake8-type-checking
+    "RUF",  # Ruff-specific
+    "ANN",  # flake8-annotations
+    "D",    # pydocstyle
+]
+ignore = [
+    "D100",    # missing-module-docstring
+    "D104",    # missing-public-package-docstring
+    "D105",    # missing-docstring-in-magic-method
+    "D107",    # missing-docstring-in-__init__
+    "S101",    # assert-used (allowed in tests)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*" = ["S101", "ANN"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "pep257"
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# ── Pytest ────────────────────────────────────────────────
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+
+# ── Pyright ───────────────────────────────────────────────
+
+[tool.pyright]
+include = ["src"]
+exclude = [
+    "**/node_modules",
+    "**/__pycache__",
+    ".venv",
+]
+extraPaths = ["."]
+venvPath = "."
+venv = ".venv"
+typeCheckingMode = "strict"
+reportUnnecessaryTypeIgnoreComment = true

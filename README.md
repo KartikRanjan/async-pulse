@@ -25,7 +25,7 @@ and PostgreSQL via SQLAlchemy — the Python bridge from NestJS/TypeScript.
 
 Feature-first modular monolith with layered internals:
 
-```
+```text
 Router → Application Service → Domain Entity → Repository → Unit of Work → SQLAlchemy → PostgreSQL
 ```
 
@@ -43,7 +43,7 @@ translated to HTTP once in `core/exception_handlers.py`. Always set
 
 ## Project Structure
 
-```
+```text
 src/
 ├── main.py                      # App wiring: middleware, handlers, routers, /health
 ├── modules/
@@ -81,7 +81,7 @@ src/
 ## NestJS → FastAPI Translation
 
 | NestJS | FastAPI |
-|---|---|
+| --- | --- |
 | `@Controller('users')` | `router = APIRouter(prefix="/users")` |
 | `@Injectable() class UserService` | `class UserService` (no decorator) |
 | Constructor DI | `Depends()` on function params |
@@ -114,7 +114,7 @@ open http://localhost:8000/docs
 ## API Endpoints
 
 | Method | Path | Description |
-|---|---|---|
+| --- | --- | --- |
 | GET | /health | Liveness probe |
 | GET | /api/v1/users/ | List users (paginated) |
 | GET | /api/v1/users/me | Current user profile |
