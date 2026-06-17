@@ -27,8 +27,8 @@ class UnitOfWork:
 
     async def __aexit__(
         self,
-        exc_type: type | None,
-        exc_val: Exception | None,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
         exc_tb: object,
     ) -> None:
         if exc_type is not None:
@@ -44,7 +44,7 @@ class UnitOfWork:
 
 
 async def get_unit_of_work(
-    session: AsyncSession = Depends(get_async_session),  # noqa: B008
+    session: AsyncSession = Depends(get_async_session),
 ) -> AsyncGenerator[UnitOfWork, None]:
     """FastAPI dependency — yields a ``UnitOfWork`` per request."""
     async with UnitOfWork(session) as uow:

@@ -10,7 +10,7 @@ from src.modules.users.service import UserService
 
 
 async def get_user_service(
-    uow: UnitOfWork = Depends(get_unit_of_work),  # noqa: B008
+    uow: UnitOfWork = Depends(get_unit_of_work),
 ) -> UserService:
     """FastAPI dependency — yields a ``UserService`` with its UoW."""
     return UserService(uow)

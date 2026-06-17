@@ -265,7 +265,7 @@ have the service commit through the UoW.
 python -m venv .venv && source .venv/bin/activate
 pip install fastapi uvicorn sqlalchemy asyncpg python-jose passlib bcrypt httpx
 pip install structlog prometheus-client opentelemetry-sdk arq redis
-pip install -e ".[dev]"  # pytest, ruff, mypy
+pip install -e ".[dev]"  # pytest, ruff, pyright
 
 # Run server
 uvicorn src.main:app --reload
@@ -281,5 +281,5 @@ pytest --cov=src --cov-report=term-missing
 
 # Lint
 ruff check src/
-mypy src/
+pyright src/
 ```

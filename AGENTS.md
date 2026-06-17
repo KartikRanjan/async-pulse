@@ -146,7 +146,7 @@ HTTP Request → Router → Service → Repository → UnitOfWork / Session → 
 
 ### Code Style & Verification
 
-- Run code formatters and linters (`ruff` and `mypy`) before submitting changes.
+- Run code formatters and linters (`ruff` and `pyright`) before submitting changes.
 - Ensure all public functions have PEP 257 compliant docstrings (using imperative mood, e.g., `"Retrieve user profile by ID."`).
 - Add appropriate type annotations to all arguments and return values.
 

@@ -44,7 +44,7 @@ Auth:           JWT (access + refresh tokens)
 Testing:        pytest + pytest-asyncio + httpx
 Observability:  structlog + prometheus-client + OpenTelemetry
 Workers:        arq (async background jobs)
-Linting:        ruff + mypy
+Linting:        ruff + pyright
 ```
 
 ### Why SQLAlchemy instead of SQLModel?

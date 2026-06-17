@@ -4,6 +4,8 @@ Initialise once at startup (``setup_logging`` called from ``core/lifespan.py``).
 Module-level singleton — never constructor-injected (CODING_CONVENTIONS §16).
 """
 
+from typing import cast
+
 import structlog
 
 
@@ -25,4 +27,4 @@ def setup_logging() -> None:
 
 def get_logger(name: str | None = None) -> structlog.stdlib.BoundLogger:
     """Return a bound structlog logger."""
-    return structlog.get_logger(name)
+    return cast("structlog.stdlib.BoundLogger", structlog.get_logger(name))

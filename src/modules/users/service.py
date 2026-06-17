@@ -4,6 +4,7 @@ Depends on the repository for data access and the Unit of Work for
 transaction boundaries.  Never imports FastAPI, requests, or responses.
 """
 
+from typing import Any
 
 from src.db.unit_of_work import UnitOfWork
 from src.modules.users.entities import User
@@ -59,7 +60,7 @@ class UserService:
         if not user:
             raise UserNotFoundError(user_id)
 
-        update_fields: dict = {}
+        update_fields: dict[str, Any] = {}
         if payload.email is not None:
             existing = await self.repo.get_by_email(payload.email)
             if existing and existing.id != user_id:

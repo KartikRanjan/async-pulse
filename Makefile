@@ -16,8 +16,8 @@ format: ## Format code with ruff
 lint: ## Lint with ruff (check-only)
 	ruff check src/ tests/
 
-typecheck: ## Type-check with mypy
-	mypy src/
+typecheck: ## Type-check with pyright
+	pyright src/
 
 test: ## Run tests with pytest
 	pytest tests/ -v --tb=short
@@ -31,4 +31,4 @@ run: ## Run the application (dev mode)
 clean: ## Remove build artifacts and caches
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
-	rm -rf dist/ build/ .pytest_cache/ .mypy_cache/ .ruff_cache/ htmlcov/ .coverage
+	rm -rf dist/ build/ .pytest_cache/ .pyright_cache/ .ruff_cache/ htmlcov/ .coverage

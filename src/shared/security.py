@@ -7,6 +7,7 @@ Uses bcrypt directly — never passlib (passlib is incompatible with bcrypt>=4.1
 """
 
 from datetime import UTC, datetime, timedelta
+from typing import Any, cast
 
 import bcrypt
 from jose import jwt
@@ -46,18 +47,19 @@ def create_refresh_token(subject: str) -> str:
     return _create_token(subject, expires, token_type="refresh")  # noqa: S106
 
 
-def decode_token(token: str) -> dict:
+def decode_token(token: str) -> dict[str, Any]:
     """Decode and validate a JWT.
 
     Returns the payload dict on success.
     Raises ``jose.JWTError`` on any validation failure.
     """
     settings = get_settings()
-    return jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+    payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+    return cast("dict[str, Any]", payload)
 
 
 def _create_token(subject: str, expires_delta: timedelta, token_type: str) -> str:
     settings = get_settings()
     expire = datetime.now(UTC) + expires_delta
     payload = {"sub": subject, "exp": expire, "type": token_type}
-    return jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
+    return cast("str", jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256"))

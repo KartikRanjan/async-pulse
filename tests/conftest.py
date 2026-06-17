@@ -3,6 +3,8 @@
 Uses an in-memory SQLite database for isolation and speed.
 """
 
+from collections.abc import AsyncGenerator
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -25,8 +27,9 @@ test_session_factory = async_sessionmaker(
 # ── Database fixtures ─────────────────────────────────────
 
 
+
 @pytest.fixture
-async def db_session():
+async def db_session() -> AsyncGenerator[AsyncSession, None]:
     """Yield a fresh database session and roll back after the test."""
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -41,10 +44,10 @@ async def db_session():
 
 
 @pytest.fixture
-async def client(db_session: AsyncSession):
+async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     """Yield an ``AsyncClient`` wired to the test database."""
 
-    async def _override_session():
+    async def _override_session() -> AsyncGenerator[AsyncSession, None]:
         yield db_session
 
     app.dependency_overrides[get_async_session] = _override_session
@@ -54,3 +57,4 @@ async def client(db_session: AsyncSession):
         yield ac
 
     app.dependency_overrides.clear()
+

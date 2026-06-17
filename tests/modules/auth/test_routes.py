@@ -1,11 +1,12 @@
 """Tests for the auth endpoints."""
 
 import pytest
+from httpx import AsyncClient
 
 
 @pytest.mark.asyncio
-async def test_login_success(client):
-    """POST /api/v1/auth/login — valid credentials should return tokens."""
+async def test_login_success(client: AsyncClient) -> None:
+    """POST /api/v1/auth/login — valid credentials should return wrapped tokens."""
     # Create a user first
     await client.post(
         "/api/v1/users/",
@@ -24,14 +25,17 @@ async def test_login_success(client):
         },
     )
     assert response.status_code == 200
-    data = response.json()
+    res_body = response.json()
+    assert res_body["success"] is True
+    assert res_body["message"] == "Login successful"
+    data = res_body["data"]
     assert "access_token" in data
     assert "refresh_token" in data
     assert data["token_type"] == "bearer"  # noqa: S105
 
 
 @pytest.mark.asyncio
-async def test_login_invalid_credentials(client):
+async def test_login_invalid_credentials(client: AsyncClient) -> None:
     """POST /api/v1/auth/login — bad password should return 401."""
     await client.post(
         "/api/v1/users/",
@@ -53,8 +57,8 @@ async def test_login_invalid_credentials(client):
 
 
 @pytest.mark.asyncio
-async def test_refresh_token(client):
-    """POST /api/v1/auth/refresh — valid refresh token should return new tokens."""
+async def test_refresh_token(client: AsyncClient) -> None:
+    """POST /api/v1/auth/refresh — valid refresh token should return wrapped tokens."""
     # Login to get tokens
     await client.post(
         "/api/v1/users/",
@@ -71,13 +75,18 @@ async def test_refresh_token(client):
             "password": "securepass123",
         },
     )
-    refresh_token = login_resp.json()["refresh_token"]
+    refresh_token = login_resp.json()["data"]["refresh_token"]
 
     response = await client.post(
         "/api/v1/auth/refresh",
         json={"refresh_token": refresh_token},
     )
     assert response.status_code == 200
-    data = response.json()
+    res_body = response.json()
+    assert res_body["success"] is True
+    assert res_body["message"] == "Token refreshed successfully"
+    data = res_body["data"]
     assert "access_token" in data
     assert "refresh_token" in data
+
+

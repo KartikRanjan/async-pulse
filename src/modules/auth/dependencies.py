@@ -12,7 +12,7 @@ from src.modules.users.repository import UserRepository
 
 
 async def get_auth_service(
-    session: AsyncSession = Depends(get_async_session),  # noqa: B008
+    session: AsyncSession = Depends(get_async_session),
 ) -> AuthService:
     """FastAPI dependency — yields an ``AuthService`` wired to its repository."""
     user_repository = UserRepository(session)
