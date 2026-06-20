@@ -2,6 +2,10 @@
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import update
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.modules.users.models import UserModel
 
 
 @pytest.mark.asyncio
@@ -139,8 +143,11 @@ async def test_update_user(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_delete_user(client: AsyncClient) -> None:
-    """DELETE /api/v1/users/{id} — should delete and return 204."""
+async def test_delete_user_requires_superuser(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """DELETE /api/v1/users/{id} — requires superuser privileges."""
+    # Create user
     create_resp = await client.post(
         "/api/v1/users/",
         json={
@@ -151,9 +158,95 @@ async def test_delete_user(client: AsyncClient) -> None:
     )
     user_id = create_resp.json()["data"]["id"]
 
-    response = await client.delete(f"/api/v1/users/{user_id}")
+    # Login as regular user
+    login_resp = await client.post(
+        "/api/v1/auth/login",
+        json={"email": "eve@example.com", "password": "securepass123"},
+    )
+    token = login_resp.json()["data"]["access_token"]
+
+    # Regular user cannot delete — should return 403
+    response = await client.delete(
+        f"/api/v1/users/{user_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_delete_user_as_superuser(client: AsyncClient, db_session: AsyncSession) -> None:
+    """DELETE /api/v1/users/{id} — superuser can soft-delete a user."""
+    # Create user to delete
+    create_resp = await client.post(
+        "/api/v1/users/",
+        json={
+            "email": "victim@example.com",
+            "username": "victim",
+            "password": "securepass123",
+        },
+    )
+    victim_id = create_resp.json()["data"]["id"]
+
+    # Create superuser
+    admin_resp = await client.post(
+        "/api/v1/users/",
+        json={
+            "email": "admin@example.com",
+            "username": "admin",
+            "password": "securepass123",
+        },
+    )
+    admin_id = admin_resp.json()["data"]["id"]
+
+    # Promote to superuser directly in DB
+    from sqlalchemy import select
+
+    from src.modules.users.entities import UserRole
+
+    await db_session.execute(
+        update(UserModel).where(UserModel.id == admin_id).values(role=UserRole.SUPERUSER)
+    )
+    await db_session.commit()
+
+    # Login as superuser
+    login_resp = await client.post(
+        "/api/v1/auth/login",
+        json={"email": "admin@example.com", "password": "securepass123"},
+    )
+    admin_token = login_resp.json()["data"]["access_token"]
+
+    # Delete with superuser auth — should soft-delete (204)
+    response = await client.delete(
+        f"/api/v1/users/{victim_id}",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
     assert response.status_code == 204
 
-    # Verify deleted
-    get_resp = await client.get(f"/api/v1/users/{user_id}")
+    # Verify soft-deleted: user is no longer accessible via GET (returns 404)
+    get_resp = await client.get(f"/api/v1/users/{victim_id}")
     assert get_resp.status_code == 404
+
+    # Verify soft-deleted state exists in DB
+    db_row = (
+        await db_session.execute(select(UserModel).where(UserModel.id == victim_id))
+    ).scalar_one()
+    assert db_row.deleted_at is not None
+
+
+@pytest.mark.asyncio
+async def test_delete_user_unauthenticated(client: AsyncClient) -> None:
+    """DELETE /api/v1/users/{id} — anonymous request should return 401."""
+    # Create user
+    create_resp = await client.post(
+        "/api/v1/users/",
+        json={
+            "email": "anon@example.com",
+            "username": "anon",
+            "password": "securepass123",
+        },
+    )
+    user_id = create_resp.json()["data"]["id"]
+
+    # No auth header
+    response = await client.delete(f"/api/v1/users/{user_id}")
+    assert response.status_code == 401

@@ -3,6 +3,16 @@
 Uses an in-memory SQLite database for isolation and speed.
 """
 
+# ruff: noqa: E402 — env vars must be set before Settings() is called
+
+import os
+
+os.environ["SECRET_KEY"] = "test-only-secret-key-that-is-at-least-32-characters-long"  # noqa: S105
+os.environ["DEBUG"] = "false"
+os.environ["ENV"] = "testing"
+os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./test_async_pulse.db"
+os.environ["DB_SCHEMA"] = ""
+
 from collections.abc import AsyncGenerator
 
 import pytest
@@ -10,19 +20,15 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import close_all_sessions
 
+from src.core.settings import get_settings
 from src.db.base import Base
 from src.db.session import get_async_session
+
+get_settings.cache_clear()
+
+from sqlalchemy.pool import StaticPool
+
 from src.main import app
-
-# ── In-memory test engine ─────────────────────────────────
-
-test_engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
-test_session_factory = async_sessionmaker(
-    test_engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-)
-
 
 # ── Database fixtures ─────────────────────────────────────
 
@@ -30,16 +36,29 @@ test_session_factory = async_sessionmaker(
 @pytest.fixture
 async def db_session() -> AsyncGenerator[AsyncSession, None]:
     """Yield a fresh database session and roll back after the test."""
-    async with test_engine.begin() as conn:
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+        echo=False,
+    )
+
+    async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    async with test_session_factory() as session:
+    session_factory = async_sessionmaker(
+        engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+
+    async with session_factory() as session:
         yield session
         await session.rollback()
 
     close_all_sessions()
-    async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+    await engine.dispose()
+
 
 
 @pytest.fixture

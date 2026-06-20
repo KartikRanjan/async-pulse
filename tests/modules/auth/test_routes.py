@@ -88,5 +88,3 @@ async def test_refresh_token(client: AsyncClient) -> None:
     data = res_body["data"]
     assert "access_token" in data
     assert "refresh_token" in data
-
-
