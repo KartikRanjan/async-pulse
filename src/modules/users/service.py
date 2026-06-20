@@ -4,13 +4,14 @@ Depends on the repository for data access and the Unit of Work for
 transaction boundaries.  Never imports FastAPI, requests, or responses.
 """
 
+import uuid
 from typing import Any
 
+from src.core.cache import CacheClient
 from src.db.unit_of_work import UnitOfWork
 from src.modules.users.entities import User
 from src.modules.users.exceptions import (
     UserAlreadyExistsError,
-    UserDeactivationError,
     UserNotFoundError,
 )
 from src.modules.users.repository import UserRepository
@@ -21,15 +22,25 @@ from src.shared.security import hash_password
 class UserService:
     """Orchestrates user-related business operations."""
 
-    def __init__(self, uow: UnitOfWork) -> None:
+    def __init__(
+        self,
+        repository: UserRepository,
+        uow: UnitOfWork,
+        cache: CacheClient | None = None,
+    ) -> None:
+        self.repo = repository
         self.uow = uow
+        self.cache = cache
 
-    @property
-    def repo(self) -> UserRepository:
-        """Shortcut to the user repository on the current UoW."""
-        if self.uow.users is None:
-            raise RuntimeError("UserService.repo accessed before UnitOfWork was entered")
-        return self.uow.users
+    # ── Queries (for cross-module consumption) ────────────
+
+    async def get_user_by_email(self, email: str) -> User | None:
+        """Fetch a user by email. Returns ``None`` if not found."""
+        return await self.repo.get_by_email(email)
+
+    async def get_user_by_id(self, user_id: str) -> User | None:
+        """Fetch a user by ID. Returns ``None`` if not found."""
+        return await self.repo.get_by_id(user_id)
 
     # ── Commands ──────────────────────────────────────────
 
@@ -41,7 +52,9 @@ class UserService:
                 raise UserAlreadyExistsError("A user with this email already exists")
             raise UserAlreadyExistsError("A user with this username already exists")
 
+        # Initial status is PENDING_VERIFICATION for new users, role is USER
         user = await self.repo.create(
+            user_id=str(uuid.uuid4()),
             email=payload.email,
             username=payload.username,
             hashed_password=hash_password(payload.password),
@@ -67,7 +80,7 @@ class UserService:
         *,
         current_user_id: str | None = None,
     ) -> User:
-        """Update a user's fields. Raises ``UserNotFoundError`` if missing."""
+        """Update a user's profile fields. Raises ``UserNotFoundError`` if missing."""
         user = await self.repo.get_by_id(user_id)
         if not user:
             raise UserNotFoundError(user_id)
@@ -83,23 +96,22 @@ class UserService:
             if existing and existing.id != user_id:
                 raise UserAlreadyExistsError("A user with this username already exists")
             update_fields["username"] = payload.username
-        if payload.password is not None:
-            update_fields["hashed_password"] = hash_password(payload.password)
-        if payload.is_active is not None:
-            if current_user_id and user_id == current_user_id and not payload.is_active:
-                raise UserDeactivationError()
-            update_fields["is_active"] = payload.is_active
 
         if update_fields:
             user = await self.repo.update(user, **update_fields)
             await self.uow.commit()
+            if self.cache:
+                await self.cache.delete(f"user:{user_id}")
 
         return user
 
     async def delete_user(self, user_id: str) -> None:
-        """Delete a user. Raises ``UserNotFoundError`` if missing."""
+        """Soft-delete a user. Raises ``UserNotFoundError`` if missing."""
         user = await self.repo.get_by_id(user_id)
         if not user:
             raise UserNotFoundError(user_id)
-        await self.repo.delete(user_id)
+        user.deactivate()
+        await self.repo.update(user, deleted_at=user.deleted_at)
         await self.uow.commit()
+        if self.cache:
+            await self.cache.delete(f"user:{user_id}")

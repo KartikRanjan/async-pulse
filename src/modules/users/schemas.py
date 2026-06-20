@@ -8,6 +8,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+from src.modules.users.entities import UserRole, UserStatus
+
 # ── Response schemas (public) ─────────────────────────────
 
 
@@ -19,6 +21,8 @@ class UserRead(BaseModel):
     id: str
     email: EmailStr
     username: str
+    status: UserStatus
+    role: UserRole
     is_active: bool
     is_superuser: bool
     created_at: datetime
@@ -41,5 +45,3 @@ class UserUpdate(BaseModel):
 
     email: EmailStr | None = None
     username: str | None = Field(default=None, min_length=3, max_length=100)
-    password: str | None = Field(default=None, min_length=8)
-    is_active: bool | None = None

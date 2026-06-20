@@ -40,3 +40,40 @@ class UserDeactivationError(ValidationError):
 
     def __init__(self) -> None:
         super().__init__("Cannot deactivate your own account")
+
+
+class UserAlreadyInactiveError(ValidationError):
+    """Raised when attempting to deactivate an already inactive user."""
+
+    def __init__(self, user_id: str = "") -> None:
+        detail = f"User is already inactive: {user_id}" if user_id else "User is already inactive"
+        super().__init__(detail)
+
+
+class InvalidStatusTransitionError(ValidationError):
+    """Raised when an invalid status transition is attempted."""
+
+    def __init__(self, user_id: str, from_status: str, to_status: str) -> None:
+        detail = f"Cannot transition user {user_id} from {from_status} to {to_status}"
+        super().__init__(detail)
+
+
+class UserSuspendedError(AuthenticationError):
+    """Raised when a suspended user tries to authenticate."""
+
+    def __init__(self, detail: str = "User account has been suspended") -> None:
+        super().__init__(detail)
+
+
+class UserBannedError(AuthenticationError):
+    """Raised when a banned user tries to authenticate."""
+
+    def __init__(self, detail: str = "User account has been banned") -> None:
+        super().__init__(detail)
+
+
+class UserNotVerifiedError(AuthenticationError):
+    """Raised when a user attempts actions requiring verification."""
+
+    def __init__(self, detail: str = "User email has not been verified") -> None:
+        super().__init__(detail)
