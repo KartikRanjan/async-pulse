@@ -1,4 +1,4 @@
-.PHONY: install install-dev lint format typecheck test test-cov run clean help
+.PHONY: install install-dev lint format typecheck test test-cov run clean help migrate migrate-gen migrate-up migrate-down migrate-history migrate-current
 
 help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -32,3 +32,18 @@ clean: ## Remove build artifacts and caches
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
 	rm -rf dist/ build/ .pytest_cache/ .pyright_cache/ .ruff_cache/ htmlcov/ .coverage
+
+migrate-gen: ## Generate a new migration (usage: make migrate-gen m="description")
+	alembic revision --autogenerate -m "$(m)"
+
+migrate-up: ## Apply all pending migrations
+	alembic upgrade head
+
+migrate-down: ## Rollback last migration
+	alembic downgrade -1
+
+migrate-history: ## Show migration history
+	alembic history --verbose
+
+migrate-current: ## Show current migration revision
+	alembic current
