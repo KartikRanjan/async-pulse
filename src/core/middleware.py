@@ -34,17 +34,13 @@ def add_starlette_error_middleware(app: FastAPI) -> None:
     """
 
     @app.middleware("http")
-    async def _catch_starlette_errors(
-        request: Request, call_next: object
-    ) -> JSONResponse:
-        response = await call_next(request)  # type: ignore[operator]
+    async def _catch_starlette_errors(request: Request, call_next: object) -> JSONResponse:
+        response = await call_next(request)
         if response.status_code == 404:
             path = request.url.path
             return JSONResponse(
                 status_code=404,
-                content=error_response(
-                    message=f"Route not found: {path}", error_code="NOT_FOUND"
-                ),
+                content=error_response(message=f"Route not found: {path}", error_code="NOT_FOUND"),
             )
         if response.status_code == 405:
             return JSONResponse(
@@ -53,4 +49,4 @@ def add_starlette_error_middleware(app: FastAPI) -> None:
                     message="Method not allowed", error_code="METHOD_NOT_ALLOWED"
                 ),
             )
-        return response  # type: ignore[return-value]
+        return response
