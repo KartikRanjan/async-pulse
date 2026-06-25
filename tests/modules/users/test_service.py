@@ -4,7 +4,6 @@ The repository, Unit of Work, and cache are mocked so these tests exercise
 only the service's own branch logic (conflict detection, not-found guards,
 privileged writes) without touching a database.
 """
-# ruff: noqa: S105, S106 — test fixtures use literal credentials
 
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock

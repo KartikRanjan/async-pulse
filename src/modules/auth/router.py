@@ -26,11 +26,11 @@ AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 CurrentUserDep = Annotated[User, Depends(get_current_user)]
 
 
-def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
+def _set_refresh_cookie(response: Response, token: str) -> None:
     """Set the refresh token as an httpOnly secure cookie."""
     response.set_cookie(
         key=settings.REFRESH_COOKIE_NAME,
-        value=refresh_token,
+        value=token,
         max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400,
         path=settings.REFRESH_COOKIE_PATH,
         domain=settings.REFRESH_COOKIE_DOMAIN,

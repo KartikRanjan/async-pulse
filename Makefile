@@ -1,32 +1,34 @@
 .PHONY: install install-dev lint format typecheck test test-cov run clean help migrate migrate-gen migrate-up migrate-down migrate-history migrate-current
 
+VENV := .venv/bin
+
 help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
 install: ## Install production dependencies
-	pip install -e .
+	$(VENV)/pip install -e .
 
 install-dev: ## Install all dependencies (dev + test + lint)
-	pip install -e ".[dev,test,lint]"
+	$(VENV)/pip install -e ".[dev,test,lint]"
 
 format: ## Format code with ruff
-	ruff format src/ tests/
-	ruff check --fix src/ tests/
+	$(VENV)/ruff format src/ tests/
+	$(VENV)/ruff check --fix src/ tests/
 
 lint: ## Lint with ruff (check-only)
-	ruff check src/ tests/
+	$(VENV)/ruff check src/ tests/
 
 typecheck: ## Type-check with pyright
-	pyright src/
+	$(VENV)/pyright src/
 
 test: ## Run tests with pytest
-	pytest tests/ -v --tb=short
+	$(VENV)/pytest tests/ -v --tb=short
 
 test-cov: ## Run tests with coverage report
-	pytest tests/ -v --tb=short --cov=src --cov-report=term-missing
+	$(VENV)/pytest tests/ -v --tb=short --cov=src --cov-report=term-missing
 
 run: ## Run the application (dev mode)
-	uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+	$(VENV)/uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
 
 clean: ## Remove build artifacts and caches
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
@@ -34,16 +36,16 @@ clean: ## Remove build artifacts and caches
 	rm -rf dist/ build/ .pytest_cache/ .pyright_cache/ .ruff_cache/ .mypy_cache/ htmlcov/ .coverage
 
 migrate-gen: ## Generate a new migration (usage: make migrate-gen m="description")
-	alembic revision --autogenerate -m "$(m)"
+	$(VENV)/alembic revision --autogenerate -m "$(m)"
 
 migrate-up: ## Apply all pending migrations
-	alembic upgrade head
+	$(VENV)/alembic upgrade head
 
 migrate-down: ## Rollback last migration
-	alembic downgrade -1
+	$(VENV)/alembic downgrade -1
 
 migrate-history: ## Show migration history
-	alembic history --verbose
+	$(VENV)/alembic history --verbose
 
 migrate-current: ## Show current migration revision
-	alembic current
+	$(VENV)/alembic current

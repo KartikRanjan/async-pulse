@@ -37,14 +37,14 @@ def create_access_token(subject: str, session_id: str | None = None) -> str:
     """Create a short-lived access token for *subject* (user id)."""
     settings = get_settings()
     expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    return _create_token(subject, expires, token_type="access", session_id=session_id)  # noqa: S106
+    return _create_token(subject, expires, token_type="access", session_id=session_id)
 
 
 def create_refresh_token(subject: str, session_id: str) -> str:
     """Create a long-lived refresh token with a session ID (jti) for RTR."""
     settings = get_settings()
     expires = timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
-    return _create_token(subject, expires, token_type="refresh", session_id=session_id)  # noqa: S106
+    return _create_token(subject, expires, token_type="refresh", session_id=session_id)
 
 
 def decode_token(token: str) -> dict[str, Any]:
@@ -68,7 +68,7 @@ def _create_token(
     expire = datetime.now(UTC) + expires_delta
     payload = {"sub": subject, "exp": expire, "type": token_type}
     if session_id:
-        if token_type == "refresh":  # noqa: S105
+        if token_type == "refresh":
             payload["jti"] = session_id
         else:
             payload["sid"] = session_id

@@ -4,6 +4,7 @@ import asyncio
 from logging.config import fileConfig
 
 from alembic import context
+from alembic.runtime.environment import NameFilterParentNames, NameFilterType
 from sqlalchemy import pool, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
@@ -32,7 +33,11 @@ def _migration_url() -> str:
     return settings.DIRECT_DATABASE_URL or settings.DATABASE_URL
 
 
-def include_name(name: str, type_: str, parent_names: dict) -> bool:
+def include_name(
+    name: str | None,
+    type_: NameFilterType,
+    _parent_names: NameFilterParentNames,
+) -> bool:
     """Filter schemas — only manage the project schema."""
     if type_ == "schema":
         return name == settings.DB_SCHEMA

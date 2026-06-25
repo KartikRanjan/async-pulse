@@ -7,7 +7,9 @@ Register them in ``main.py`` via the ``add_*`` helpers.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
+from starlette.responses import Response
 
 from src.core.settings import get_settings
 from src.shared.responses import error_response
@@ -33,8 +35,10 @@ def add_starlette_error_middleware(app: FastAPI) -> None:
     intercepts those responses and re-wraps them consistently.
     """
 
-    @app.middleware("http")
-    async def _catch_starlette_errors(request: Request, call_next: object) -> JSONResponse:
+    async def _catch_starlette_errors(
+        request: Request,
+        call_next: RequestResponseEndpoint,
+    ) -> Response:
         response = await call_next(request)
         if response.status_code == 404:
             path = request.url.path
@@ -50,3 +54,5 @@ def add_starlette_error_middleware(app: FastAPI) -> None:
                 ),
             )
         return response
+
+    app.add_middleware(BaseHTTPMiddleware, dispatch=_catch_starlette_errors)

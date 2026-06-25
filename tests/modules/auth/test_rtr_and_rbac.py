@@ -1,5 +1,4 @@
 """Unit and integration tests for RTR, status transitions, grace periods, and hierarchical RBAC."""
-# ruff: noqa: S106
 
 from typing import Any
 

@@ -52,12 +52,15 @@ class UserService:
                 raise UserAlreadyExistsError("A user with this email already exists")
             raise UserAlreadyExistsError("A user with this username already exists")
 
-        # Initial status is PENDING_VERIFICATION for new users, role is USER
+        # New users start ACTIVE with the default USER role. (Email verification
+        # is not yet implemented; when it is, create as PENDING_VERIFICATION and
+        # add a verification endpoint that transitions the user to ACTIVE.)
         user = await self.repo.create(
             user_id=str(uuid.uuid4()),
             email=payload.email,
             username=payload.username,
             hashed_password=hash_password(payload.password),
+            status=UserStatus.ACTIVE,
         )
         await self.uow.commit()
         return user

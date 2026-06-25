@@ -5,7 +5,6 @@ token-validation branches of ``refresh_token``, and session revocation on
 logout. RTR rotation, breach detection, and grace-period behaviour are
 covered end-to-end in ``test_rtr_and_rbac.py``.
 """
-# ruff: noqa: S105, S106 — test fixtures use literal credentials
 
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock

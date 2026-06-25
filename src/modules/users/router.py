@@ -89,7 +89,7 @@ async def update_user(
 async def delete_user(
     user_id: str,
     service: UserServiceDep,
-    current_user: User = Depends(require_role(UserRole.SUPERUSER)),  # noqa: B008
+    _current_user: User = Depends(require_role(UserRole.SUPERUSER)),  # noqa: B008
 ) -> None:
     """Soft-delete a user. Requires superuser privileges."""
     await service.delete_user(user_id)

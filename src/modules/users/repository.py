@@ -109,6 +109,7 @@ class UserRepository:
         email: str,
         username: str,
         hashed_password: str,
+        status: UserStatus = UserStatus.ACTIVE,
     ) -> User:
         """Persist a new user and return the domain entity."""
         model = UserModel(
@@ -116,6 +117,7 @@ class UserRepository:
             email=email,
             username=username,
             hashed_password=hashed_password,
+            status=status,
             created_at=datetime.now(UTC),
             updated_at=datetime.now(UTC),
         )

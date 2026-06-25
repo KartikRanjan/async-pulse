@@ -5,11 +5,14 @@ If Redis is unavailable or fails to connect, transparently falls back to
 an in-memory dictionary.
 """
 
+import asyncio
+import contextlib
 import json
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, Protocol, cast
 
-from redis.asyncio import Redis
+import redis.asyncio as aioredis
+from redis.exceptions import RedisError
 
 from src.core.settings import get_settings
 from src.shared.logger import get_logger
@@ -17,32 +20,66 @@ from src.shared.logger import get_logger
 logger = get_logger(__name__)
 
 
+class _AsyncRedis(Protocol):
+    """Typed view of the ``redis.asyncio`` client methods this module uses.
+
+    redis-py's async client is under-typed: its commands inherit
+    ``Union[Awaitable[T], T]`` signatures from the sync core, so pyright's
+    strict mode reports their members as partially unknown (see
+    https://github.com/redis/redis-py/issues/3169). Pinning exact async
+    signatures here restores real type checking at every call site, so the
+    only unavoidable suppression is the untyped ``from_url`` constructor.
+    """
+
+    async def ping(self) -> bool: ...
+    async def get(self, name: str) -> str | None: ...
+    async def set(self, name: str, value: str, *, ex: int | None = None) -> bool | None: ...
+    async def delete(self, *names: str) -> int: ...
+    async def aclose(self) -> None: ...
+
+
 class CacheClient:
     """Unified cache client wrapping Redis with an in-memory fallback."""
 
     def __init__(self) -> None:
         self.settings = get_settings()
-        self._redis: Redis | None = None
+        self._redis: _AsyncRedis | None = None
         self._fallback_store: dict[str, tuple[str, datetime | None]] = {}
         self._fallback_active = False
         self._initialized = False
+        self._loop: asyncio.AbstractEventLoop | None = None
 
     async def _init_redis(self) -> None:
-        if self._initialized:
+        current_loop = asyncio.get_running_loop()
+
+        if self._initialized and self._loop is current_loop:
             return
 
+        # Event loop changed (e.g. between tests) — tear down stale connection.
+        if self._redis is not None:
+            with contextlib.suppress(Exception):
+                await self._redis.aclose()
+            self._redis = None
+
+        self._loop = current_loop
+        self._initialized = False
+        self._fallback_active = False
+
         try:
-            self._redis = Redis.from_url(  # type: ignore
-                self.settings.REDIS_URL,
-                decode_responses=True,
-                socket_timeout=2.0,
-                socket_connect_timeout=2.0,
+            self._redis = cast(
+                "_AsyncRedis",
+                aioredis.from_url(  # pyright: ignore[reportUnknownMemberType]  # redis/redis-py#3169
+                    self.settings.REDIS_URL,
+                    decode_responses=True,
+                    socket_timeout=2.0,
+                    socket_connect_timeout=2.0,
+                ),
             )
             # Ping to verify connection
-            await self._redis.ping()  # type: ignore
+            await self._redis.ping()
             self._fallback_active = False
             logger.info("Connected to Redis cache")
-        except Exception as exc:
+        except (RedisError, OSError) as exc:
             self._fallback_active = True
             self._redis = None
             logger.warning(
@@ -66,11 +103,8 @@ class CacheClient:
             return val
 
         try:
-            val = await self._redis.get(key)
-            if isinstance(val, bytes):
-                return val.decode("utf-8")
-            return val
-        except Exception as exc:
+            return await self._redis.get(key)
+        except RedisError as exc:
             logger.warning("Redis GET error, using in-memory store", key=key, error=str(exc))
             self._fallback_active = True
             return await self.get(key)
@@ -86,7 +120,7 @@ class CacheClient:
 
         try:
             await self._redis.set(key, value, ex=ttl)
-        except Exception as exc:
+        except RedisError as exc:
             logger.warning("Redis SET error, using in-memory store", key=key, error=str(exc))
             self._fallback_active = True
             await self.set(key, value, ttl)
@@ -101,7 +135,7 @@ class CacheClient:
 
         try:
             await self._redis.delete(key)
-        except Exception as exc:
+        except RedisError as exc:
             logger.warning("Redis DELETE error, using in-memory store", key=key, error=str(exc))
             self._fallback_active = True
             await self.delete(key)

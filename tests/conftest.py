@@ -7,7 +7,7 @@ Uses an in-memory SQLite database for isolation and speed.
 
 import os
 
-os.environ["SECRET_KEY"] = "test-only-secret-key-that-is-at-least-32-characters-long"  # noqa: S105
+os.environ["SECRET_KEY"] = "test-only-secret-key-that-is-at-least-32-characters-long"
 os.environ["DEBUG"] = "false"
 os.environ["ENV"] = "testing"
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./test_async_pulse.db"

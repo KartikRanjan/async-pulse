@@ -5,6 +5,7 @@ Never constructor-injected.
 """
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings
@@ -42,7 +43,7 @@ class Settings(BaseSettings):
     REFRESH_COOKIE_DOMAIN: str | None = None
     REFRESH_COOKIE_SECURE: bool = False
     REFRESH_COOKIE_HTTPONLY: bool = True
-    REFRESH_COOKIE_SAMESITE: str = "lax"
+    REFRESH_COOKIE_SAMESITE: Literal["lax", "strict", "none"] = "lax"
 
     # ── CORS ──────────────────────────────────────────────
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
@@ -70,4 +71,4 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     """Return the cached ``Settings`` singleton."""
-    return Settings()
+    return Settings()  # pyright: ignore[reportCallIssue] — values loaded from env/.env
