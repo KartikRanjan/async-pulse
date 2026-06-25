@@ -1,0 +1,48 @@
+# ── Secrets — never bake these into an image ──────────────────
+.env
+.env.*
+!.env.example
+
+# ── Python caches & build artifacts ───────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.eggs/
+
+# ── Virtual environments ──────────────────────────────────────
+.venv/
+venv/
+
+# ── Local databases ───────────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+
+# ── Tooling caches ────────────────────────────────────────────
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyright_cache/
+.coverage
+htmlcov/
+
+# ── Version control & CI ──────────────────────────────────────
+.git/
+.gitignore
+.github/
+
+# ── Editor / OS ───────────────────────────────────────────────
+.vscode/
+.idea/
+.DS_Store
+
+# ── Docs & meta (not needed at runtime) ───────────────────────
+docs/
+*.md
+!README.md
+.kiro/
+.kilo/
+.commandcode/
+tests/

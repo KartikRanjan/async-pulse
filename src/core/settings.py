@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     ENV: str = "development"
 
     # ── Database ──────────────────────────────────────────
-    DATABASE_URL: str = "sqlite+aiosqlite:///./async_pulse.db"
+    DATABASE_URL: str  # Must be provided via environment or .env
     # Optional direct (non-pooled) URL used by Alembic for DDL migrations.
     # Required when DATABASE_URL points at a pgbouncer transaction pooler
     # (e.g. Supabase port 6543) that silently drops DDL.
