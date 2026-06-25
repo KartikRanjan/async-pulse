@@ -228,26 +228,52 @@ Notes:
 
 ## 10. Makefile Targets
 
-| Command                     | Runs        | Description                       |
-| --------------------------- | ----------- | --------------------------------- |
-| `make format`               | ruff        | Format + auto-fix                 |
-| `make lint`                 | ruff        | Lint, check-only                  |
-| `make typecheck`            | **pyright** | Strict type check (authoritative) |
-| `make test`                 | pytest      | Run tests                         |
-| `make test-cov`             | pytest      | Tests + coverage report           |
-| `make run`                  | uvicorn     | Dev server with `--reload`        |
-| `make clean`                | —           | Remove caches and build artifacts |
-| `make migrate-gen m="desc"` | alembic     | Generate a migration              |
-| `make migrate-up`           | alembic     | Apply all pending migrations      |
-| `make migrate-down`         | alembic     | Roll back the last migration      |
-| `make migrate-history`      | alembic     | Show migration history            |
-| `make migrate-current`      | alembic     | Show current migration revision   |
+| Command                     | Runs        | Description                             |
+| --------------------------- | ----------- | --------------------------------------- |
+| `make format`               | ruff        | Format + auto-fix                       |
+| `make lint`                 | ruff        | Lint, check-only                        |
+| `make typecheck`            | **pyright** | Strict type check (authoritative)       |
+| `make hooks-install`        | pre-commit  | Install git pre-commit + pre-push hooks |
+| `make hooks-run`            | pre-commit  | Run all hooks against every file        |
+| `make test`                 | pytest      | Run tests                               |
+| `make test-cov`             | pytest      | Tests + coverage report                 |
+| `make run`                  | uvicorn     | Dev server with `--reload`              |
+| `make clean`                | —           | Remove caches and build artifacts       |
+| `make migrate-gen m="desc"` | alembic     | Generate a migration                    |
+| `make migrate-up`           | alembic     | Apply all pending migrations            |
+| `make migrate-down`         | alembic     | Roll back the last migration            |
+| `make migrate-history`      | alembic     | Show migration history                  |
+| `make migrate-current`      | alembic     | Show current migration revision         |
 
 ---
 
 ## 11. Pre-Commit / Pre-Push Workflow
 
-Run before committing:
+The repo ships a [`pre-commit`](https://pre-commit.com) config
+(`.pre-commit-config.yaml`) that automates the gate. The project hooks are
+**local** — they run through `uv run`, so they always use the same pinned
+versions as `pyproject.toml` (no globally installed tools, no version drift).
+
+Hook stages:
+
+| Stage          | Hooks                                                                            |
+| -------------- | -------------------------------------------------------------------------------- |
+| **pre-commit** | hygiene (whitespace/EOF/YAML/TOML), `ruff format`, `ruff check --fix`, `pyright` |
+| **pre-push**   | `pytest` (kept off per-commit because it is slower)                              |
+
+One-time setup (after `make install-dev`):
+
+```bash
+make hooks-install        # installs both the pre-commit and pre-push git hooks
+```
+
+Run the hooks manually any time:
+
+```bash
+make hooks-run            # pre-commit run --all-files
+```
+
+You can still run the steps individually without the framework:
 
 ```bash
 make format        # ruff format + auto-fix

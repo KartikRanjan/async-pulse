@@ -1,4 +1,4 @@
-.PHONY: install install-dev lint format typecheck test test-cov run clean help migrate migrate-gen migrate-up migrate-down migrate-history migrate-current
+.PHONY: install install-dev lint format typecheck test test-cov run clean help migrate migrate-gen migrate-up migrate-down migrate-history migrate-current hooks-install hooks-run
 
 VENV := .venv/bin
 
@@ -20,6 +20,13 @@ lint: ## Lint with ruff (check-only)
 
 typecheck: ## Type-check with pyright
 	$(VENV)/pyright src/
+
+hooks-install: ## Install pre-commit and pre-push git hooks
+	$(VENV)/pre-commit install --install-hooks
+	$(VENV)/pre-commit install --hook-type pre-push
+
+hooks-run: ## Run all pre-commit hooks against every file
+	$(VENV)/pre-commit run --all-files
 
 test: ## Run tests with pytest
 	$(VENV)/pytest tests/ -v --tb=short

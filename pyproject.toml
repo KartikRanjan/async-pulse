@@ -26,6 +26,7 @@ dev = [
     "httpx>=0.27.0",
     "ruff>=0.4.0",
     "pyright>=1.1.0",
+    "pre-commit>=3.7.0",
 ]
 test = [
     "pytest>=8.0.0",
@@ -119,4 +120,3 @@ venvPath = "."
 venv = ".venv"
 typeCheckingMode = "strict"
 reportUnnecessaryTypeIgnoreComment = true
-
