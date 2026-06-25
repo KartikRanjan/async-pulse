@@ -3,11 +3,10 @@
 import asyncio
 from logging.config import fileConfig
 
+from alembic import context
 from sqlalchemy import pool, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
-
-from alembic import context
 
 from src.core.settings import get_settings
 from src.db.registry import target_metadata
@@ -20,6 +19,17 @@ config.attributes["sqlalchemy.url"] = settings.DATABASE_URL
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
+
+
+def _migration_url() -> str:
+    """Return the URL to use for DDL migrations.
+
+    ``DIRECT_DATABASE_URL`` bypasses the pgbouncer transaction pooler
+    (port 6543) that Supabase uses by default. The transaction pooler
+    silently discards DDL, so migrations must connect directly (port 5432).
+    Falls back to ``DATABASE_URL`` for local or already-direct setups.
+    """
+    return settings.DIRECT_DATABASE_URL or settings.DATABASE_URL
 
 
 def include_name(name: str, type_: str, parent_names: dict) -> bool:
@@ -60,9 +70,13 @@ def do_run_migrations(connection: Connection) -> None:
 
 
 async def run_async_migrations() -> None:
-    """Run migrations in 'online' mode with async engine."""
+    """Run migrations in 'online' mode via a direct database connection.
+
+    Uses ``_migration_url()`` to bypass pgbouncer when a
+    ``DIRECT_DATABASE_URL`` is configured.
+    """
     cfg = config.get_section(config.config_ini_section, {})
-    cfg["sqlalchemy.url"] = settings.DATABASE_URL
+    cfg["sqlalchemy.url"] = _migration_url()
 
     connectable = async_engine_from_config(
         cfg,
@@ -76,10 +90,8 @@ async def run_async_migrations() -> None:
         },
     )
 
-    async with connectable.connect() as connection:
-        await connection.execute(
-            text(f'CREATE SCHEMA IF NOT EXISTS "{settings.DB_SCHEMA}"')
-        )
+    async with connectable.begin() as connection:
+        await connection.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{settings.DB_SCHEMA}"'))
         await connection.run_sync(do_run_migrations)
 
     await connectable.dispose()

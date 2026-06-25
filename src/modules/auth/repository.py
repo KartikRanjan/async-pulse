@@ -1,7 +1,9 @@
-"""Auth repository — data access for authentication identities and sessions.
+"""Auth repository — data access for authentication sessions.
 
-Enforces field privilege separation: only reads/writes credential and security
-fields from the ``users`` table, and completely manages the ``sessions`` table.
+Owns the ``sessions`` table exclusively (Refresh Token Rotation tracking).
+Credential and status access on the ``users`` table is *not* handled here:
+the auth module reaches user identity data through ``UserService`` to respect
+cross-module isolation (the users module is the sole owner of ``UserModel``).
 Never commits — transaction boundaries are managed by the Unit of Work.
 """
 
@@ -10,64 +12,15 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.modules.auth.entities import AuthIdentity, UserSession
+from src.modules.auth.entities import UserSession
 from src.modules.auth.models import SessionModel
-from src.modules.users.models import UserModel
 
 
 class AuthRepository:
-    """Handles credentials access and RTR session tracking."""
+    """Handles RTR session tracking for the ``sessions`` table."""
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
-
-    # ── Identity Mapping ──────────────────────────────────
-
-    @staticmethod
-    def _to_identity(model: UserModel) -> AuthIdentity:
-        return AuthIdentity(
-            user_id=model.id,
-            email=model.email,
-            username=model.username,
-            hashed_password=model.hashed_password,
-            status=model.status,
-            role=model.role,
-            deleted_at=model.deleted_at,
-        )
-
-    # ── Identity Queries & Writes ─────────────────────────
-
-    async def get_identity_by_email(self, email: str) -> AuthIdentity | None:
-        """Fetch credentials identity by email."""
-        result = await self.session.execute(
-            select(UserModel).where(UserModel.email == email),
-        )
-        model = result.scalar_one_or_none()
-        return self._to_identity(model) if model else None
-
-    async def get_identity_by_id(self, user_id: str) -> AuthIdentity | None:
-        """Fetch credentials identity by user ID."""
-        result = await self.session.execute(
-            select(UserModel).where(UserModel.id == user_id),
-        )
-        model = result.scalar_one_or_none()
-        return self._to_identity(model) if model else None
-
-    async def update_identity(self, identity: AuthIdentity, **fields: object) -> AuthIdentity:
-        """Update identity credential/status fields. Enforces privilege separation."""
-        forbidden = {"email", "username", "created_at"}
-        if any(f in fields for f in forbidden):
-            raise TypeError("AuthRepository cannot modify profile/persona fields (email, username)")
-
-        result = await self.session.execute(
-            select(UserModel).where(UserModel.id == identity.id),
-        )
-        model = result.scalar_one()
-        for key, value in fields.items():
-            setattr(model, key, value)
-        model.updated_at = datetime.now(UTC)
-        await self.session.flush()
-        return self._to_identity(model)
 
     # ── Session Mapping ───────────────────────────────────
 

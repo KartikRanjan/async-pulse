@@ -9,7 +9,7 @@ from typing import Any
 
 from src.core.cache import CacheClient
 from src.db.unit_of_work import UnitOfWork
-from src.modules.users.entities import User
+from src.modules.users.entities import User, UserStatus
 from src.modules.users.exceptions import (
     UserAlreadyExistsError,
     UserNotFoundError,
@@ -104,6 +104,43 @@ class UserService:
                 await self.cache.delete(f"user:{user_id}")
 
         return user
+
+    # ── Privileged commands (credential / status) ─────────
+    #
+    # The users module owns the ``users`` table, so all writes to the
+    # security-sensitive columns flow through here. Other modules (e.g. auth)
+    # call these via the public ``UserService`` API instead of reaching into
+    # the users persistence model directly.
+
+    async def set_password(self, user_id: str, new_password: str) -> User:
+        """Set a new password hash for a user. Raises ``UserNotFoundError`` if missing."""
+        user = await self.repo.get_by_id(user_id)
+        if not user:
+            raise UserNotFoundError(user_id)
+        updated = await self.repo.set_credentials(
+            user_id,
+            hashed_password=hash_password(new_password),
+        )
+        await self.uow.commit()
+        if self.cache:
+            await self.cache.delete(f"user:{user_id}")
+        return updated
+
+    async def change_status(self, user_id: str, new_status: UserStatus) -> User:
+        """Transition a user's lifecycle status, enforcing entity state-machine rules.
+
+        Raises ``UserNotFoundError`` if missing and ``InvalidStatusTransitionError``
+        if the transition is not allowed.
+        """
+        user = await self.repo.get_by_id(user_id)
+        if not user:
+            raise UserNotFoundError(user_id)
+        user.transition_to(new_status)
+        updated = await self.repo.set_status(user_id, status=user.status)
+        await self.uow.commit()
+        if self.cache:
+            await self.cache.delete(f"user:{user_id}")
+        return updated
 
     async def delete_user(self, user_id: str) -> None:
         """Soft-delete a user. Raises ``UserNotFoundError`` if missing."""

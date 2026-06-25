@@ -6,54 +6,6 @@ These are plain Python objects separate from database persistence.
 from datetime import UTC, datetime
 from typing import Self, cast
 
-from src.modules.users.entities import UserRole, UserStatus
-
-
-class AuthIdentity:
-    """Represents a security/credential identity for a user.
-
-    Used by the Auth module to validate credentials, status, and role privileges
-    independently from full profile details.
-    """
-
-    def __init__(
-        self,
-        user_id: str,
-        email: str,
-        username: str,
-        hashed_password: str,
-        status: UserStatus,
-        role: UserRole,
-        deleted_at: datetime | None = None,
-    ) -> None:
-        self.id = user_id
-        self.email = email
-        self.username = username
-        self.hashed_password = hashed_password
-        self.status = status
-        self.role = role
-        self.deleted_at = deleted_at
-
-    @property
-    def is_active(self) -> bool:
-        """Verify if the identity is active and verified."""
-        return self.status == UserStatus.ACTIVE and self.deleted_at is None
-
-    @property
-    def is_suspended(self) -> bool:
-        """Check if account is temporarily suspended."""
-        return self.status == UserStatus.SUSPENDED
-
-    @property
-    def is_banned(self) -> bool:
-        """Check if account is banned."""
-        return self.status == UserStatus.BANNED
-
-    @property
-    def is_verified(self) -> bool:
-        """Check if email verification is complete."""
-        return self.status != UserStatus.PENDING_VERIFICATION
-
 
 class UserSession:
     """Represents an active Refresh Token Rotation (RTR) session."""

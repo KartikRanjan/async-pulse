@@ -41,7 +41,7 @@ class CacheClient:
             # Ping to verify connection
             await self._redis.ping()  # type: ignore
             self._fallback_active = False
-            logger.info("Connected to Redis cache", url=self.settings.REDIS_URL)
+            logger.info("Connected to Redis cache")
         except Exception as exc:
             self._fallback_active = True
             self._redis = None

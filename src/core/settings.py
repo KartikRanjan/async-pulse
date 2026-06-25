@@ -20,6 +20,12 @@ class Settings(BaseSettings):
 
     # ── Database ──────────────────────────────────────────
     DATABASE_URL: str = "sqlite+aiosqlite:///./async_pulse.db"
+    # Optional direct (non-pooled) URL used by Alembic for DDL migrations.
+    # Required when DATABASE_URL points at a pgbouncer transaction pooler
+    # (e.g. Supabase port 6543) that silently drops DDL.
+    # If not set, env.py attempts to auto-derive it; set explicitly when
+    # auto-derivation fails (e.g. custom domains, IPv6, non-standard hostnames).
+    DIRECT_DATABASE_URL: str | None = None
     DB_SCHEMA: str = "public"
 
     # ── Redis ─────────────────────────────────────────────

@@ -1,10 +1,18 @@
-.venv/
+/.venv/
 __pycache__/
 *.pyc
 .DS_Store
 *.egg-info/
 dist/
 build/
+
+# Type checking and testing caches
+.mypy_cache/
+.pyright_cache/
+.pytest_cache/
+.ruff_cache/
+htmlcov/
+.coverage
 
 # SQLite databases
 *.db

@@ -6,6 +6,7 @@ device session limits, and cache-aside storage.
 
 import hashlib
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from src.core.cache import CacheClient
@@ -17,6 +18,7 @@ from src.modules.auth.repository import AuthRepository
 from src.modules.auth.schemas import TokenPair, TokenRefreshRequest
 from src.modules.users.entities import UserStatus
 from src.modules.users.exceptions import UserBannedError, UserSuspendedError
+from src.modules.users.service import UserService
 from src.shared.security import (
     create_access_token,
     create_refresh_token,
@@ -30,18 +32,24 @@ def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
+@dataclass(frozen=True)
+class AuthServiceDeps:
+    """Collaborators for ``AuthService`` (grouped per the 3+ dependency rule)."""
+
+    repository: AuthRepository
+    user_service: UserService
+    uow: UnitOfWork
+    cache: CacheClient
+
+
 class AuthService:
     """Orchestrates login, token refresh, and logout session flows."""
 
-    def __init__(
-        self,
-        repository: AuthRepository,
-        uow: UnitOfWork,
-        cache: CacheClient,
-    ) -> None:
-        self.repo = repository
-        self.uow = uow
-        self.cache = cache
+    def __init__(self, deps: AuthServiceDeps) -> None:
+        self.repo = deps.repository
+        self.users = deps.user_service
+        self.uow = deps.uow
+        self.cache = deps.cache
         self.settings = get_settings()
 
     async def authenticate(
@@ -52,19 +60,19 @@ class AuthService:
         ip_address: str | None = None,
     ) -> TokenPair:
         """Verify login credentials and issue a new session with rotated tokens."""
-        identity = await self.repo.get_identity_by_email(email)
-        if not identity or not verify_password(password, identity.hashed_password):
+        user = await self.users.get_user_by_email(email)
+        if not user or not verify_password(password, user.hashed_password):
             raise InvalidCredentialsError()
 
         # Check account status state invariants
-        if identity.status == UserStatus.SUSPENDED:
+        if user.status == UserStatus.SUSPENDED:
             raise UserSuspendedError()
-        if identity.status == UserStatus.BANNED:
+        if user.status == UserStatus.BANNED:
             raise UserBannedError()
         # Note: we allow PENDING_VERIFICATION to login but restrict actions via dependencies
 
         # Enforce device limits: max 5 active sessions
-        active_sessions = await self.repo.get_active_sessions_for_user(identity.id)
+        active_sessions = await self.repo.get_active_sessions_for_user(user.id)
         if len(active_sessions) >= 5:
             # Revoke oldest sessions to bring count to 4 (leaving room for the new one)
             to_revoke = active_sessions[: len(active_sessions) - 4]
@@ -77,12 +85,12 @@ class AuthService:
         session_id = str(uuid.uuid4())
         expires_at = datetime.now(UTC) + timedelta(days=self.settings.REFRESH_TOKEN_EXPIRE_DAYS)
 
-        access_token = create_access_token(identity.id, session_id)
-        refresh_token = create_refresh_token(identity.id, session_id)
+        access_token = create_access_token(user.id, session_id)
+        refresh_token = create_refresh_token(user.id, session_id)
 
         session = UserSession(
             session_id=session_id,
-            user_id=identity.id,
+            user_id=user.id,
             refresh_token_hash=_hash_token(refresh_token),
             expires_at=expires_at,
             device_info=device_info,
@@ -178,12 +186,8 @@ class AuthService:
             raise InvalidTokenError("Invalid refresh token")
 
         # Validate user status
-        identity = await self.repo.get_identity_by_id(user_id)
-        if (
-            not identity
-            or identity.status == UserStatus.BANNED
-            or identity.status == UserStatus.SUSPENDED
-        ):
+        user = await self.users.get_user_by_id(user_id)
+        if not user or user.status == UserStatus.BANNED or user.status == UserStatus.SUSPENDED:
             raise InvalidTokenError("User account is inactive or blocked")
 
         # 4. Atomic Rotation

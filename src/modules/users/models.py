@@ -6,7 +6,7 @@ This is the ORM layer only — domain behaviour lives in ``entities.py``.
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, String
+from sqlalchemy import DateTime, String, Uuid
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -24,7 +24,7 @@ class UserModel(Base):
     __tablename__ = "users"
 
     id: Mapped[str] = mapped_column(
-        String(36),
+        Uuid(as_uuid=False),
         primary_key=True,
         default=lambda: str(uuid.uuid4()),
     )

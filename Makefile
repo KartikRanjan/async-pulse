@@ -31,7 +31,7 @@ run: ## Run the application (dev mode)
 clean: ## Remove build artifacts and caches
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
-	rm -rf dist/ build/ .pytest_cache/ .pyright_cache/ .ruff_cache/ htmlcov/ .coverage
+	rm -rf dist/ build/ .pytest_cache/ .pyright_cache/ .ruff_cache/ .mypy_cache/ htmlcov/ .coverage
 
 migrate-gen: ## Generate a new migration (usage: make migrate-gen m="description")
 	alembic revision --autogenerate -m "$(m)"

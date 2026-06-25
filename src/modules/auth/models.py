@@ -6,7 +6,7 @@ Supports Refresh Token Rotation (RTR) and token tracking/revocation.
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.db.base import Base
@@ -22,12 +22,12 @@ class SessionModel(Base):
     __tablename__ = "sessions"
 
     id: Mapped[str] = mapped_column(
-        String(36),
+        Uuid(as_uuid=False),
         primary_key=True,
         default=lambda: str(uuid.uuid4()),
     )
     user_id: Mapped[str] = mapped_column(
-        String(36),
+        Uuid(as_uuid=False),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -39,7 +39,7 @@ class SessionModel(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     previous_session_id: Mapped[str | None] = mapped_column(
-        String(36),
+        Uuid(as_uuid=False),
         ForeignKey("sessions.id", ondelete="SET NULL"),
         nullable=True,
     )
