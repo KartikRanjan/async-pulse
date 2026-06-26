@@ -9,8 +9,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Request, Response
 
 from src.core.settings import get_settings
-from src.modules.auth.authentication import get_current_user, oauth2_scheme
-from src.modules.auth.dependencies import get_auth_service
+from src.modules.auth.dependencies import get_auth_service, get_current_user, oauth2_scheme
 from src.modules.auth.schemas import LoginRequest, TokenPair, TokenRefreshRequest
 from src.modules.auth.service import AuthService
 from src.modules.users.entities import User

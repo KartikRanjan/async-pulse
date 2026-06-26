@@ -5,8 +5,8 @@ Builds the auth module's collaborators for injection:
 - ``get_auth_service`` — full auth use-case service (login/refresh/logout)
 
 The authentication gate (``get_current_user``, ``oauth2_scheme``) lives in
-``authentication.py``; authorization (RBAC role guards) lives in
-``permissions.py``.
+``.authentication``; authorization (RBAC role guards) lives in
+``.permissions``.
 """
 
 from fastapi import Depends

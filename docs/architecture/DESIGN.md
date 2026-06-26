@@ -87,9 +87,11 @@ async-pulse/
 │   │   │   ├── repository.py      # Data access, returns domain entities
 │   │   │   ├── entities.py        # Domain entity + business behavior
 │   │   │   ├── schemas.py         # Pydantic request/response DTOs
-│   │   │   ├── dependencies.py    # DI wiring (get_auth_repository, get_auth_service)
-│   │   │   ├── authentication.py  # Auth gate (oauth2_scheme, get_current_user, CurrentUserDep)
-│   │   │   ├── permissions.py     # RBAC guards (require_role, AdminDep, SuperuserDep)
+│   │   │   ├── dependencies/      # DI sub-package (promoted dependencies package)
+│   │   │   │   ├── __init__.py    # Consolidates and re-exports all dependencies
+│   │   │   │   ├── providers.py   # DI wiring (get_auth_repository, get_auth_service)
+│   │   │   │   ├── authentication.py # Auth gate (oauth2_scheme, get_current_user, CurrentUserDep)
+│   │   │   │   └── permissions.py # RBAC guards (require_role, AdminDep, SuperuserDep)
 │   │   │   └── exceptions.py      # Domain exceptions (AuthError subclasses)
 │   │   │
 │   │   └── users/
@@ -379,13 +381,14 @@ No manual `req.body()` parsing — it's all automatic.
 
 AsyncPulse uses **manual dependency injection** — no runtime container. FastAPI's
 `Depends()` _is_ explicit DI: you write the factory functions and FastAPI runs the
-chain per request. The auth module is split into three focused files:
+chain per request. The auth module organizes these DI and security adapters inside a `dependencies/` sub-package:
 
-| File                | Responsibility                                                    |
-| ------------------- | ----------------------------------------------------------------- |
-| `dependencies.py`   | DI wiring — builds `AuthRepository` and `AuthService`             |
-| `authentication.py` | Auth gate — `oauth2_scheme`, `get_current_user`, `CurrentUserDep` |
-| `permissions.py`    | RBAC guards — `require_role`, `AdminDep`, `SuperuserDep`          |
+| File                           | Responsibility                                                    |
+| ------------------------------ | ----------------------------------------------------------------- |
+| `dependencies/__init__.py`     | Consolidates and re-exports all dependencies                      |
+| `dependencies/providers.py`    | DI wiring — builds `AuthRepository` and `AuthService`             |
+| `dependencies/authentication.py` | Auth gate — `oauth2_scheme`, `get_current_user`, `CurrentUserDep` |
+| `dependencies/permissions.py`   | RBAC guards — `require_role`, `AdminDep`, `SuperuserDep`          |
 
 Other modules compose their own chain (`session → repository → service`) in their
 own `dependencies.py` (the equivalent of a NestJS `*.module.ts` file).
@@ -413,10 +416,10 @@ async def get_user_service(
     return UserService(repository=repository, uow=uow, cache=cache)
 ```
 
-The authentication gate lives in `modules/auth/authentication.py`:
+The authentication gate lives in `modules/auth/dependencies/authentication.py`:
 
 ```python
-# src/modules/auth/authentication.py
+# src/modules/auth/dependencies/authentication.py
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_PREFIX}/auth/login")
 
@@ -434,10 +437,10 @@ async def get_current_user(
 CurrentUserDep = Annotated[User, Depends(get_current_user)]
 ```
 
-Authorization guards live in `modules/auth/permissions.py`:
+Authorization guards live in `modules/auth/dependencies/permissions.py`:
 
 ```python
-# src/modules/auth/permissions.py
+# src/modules/auth/dependencies/permissions.py
 
 def require_role(role: UserRole) -> RoleGuard: ...
 
@@ -449,8 +452,7 @@ Routers consume these aliases, keeping signatures clean:
 
 ```python
 # any module's router
-from src.modules.auth.authentication import CurrentUserDep
-from src.modules.auth.permissions import require_role, SuperuserDep
+from src.modules.auth.dependencies import CurrentUserDep, require_role, SuperuserDep
 
 @router.get("/{user_id}", response_model=UserResponse)
 async def get_user(user_id: UUID, service: UserServiceDep):

@@ -78,17 +78,17 @@ The **auth module** promotes its single `dependencies.py` into three focused fil
 because authentication and authorization are genuinely distinct concerns:
 
 ```
-modules/auth/
-├── dependencies.py    # DI wiring only: get_auth_repository, get_auth_service
-├── authentication.py  # Auth gate: oauth2_scheme, get_current_user, CurrentUserDep
-└── permissions.py     # RBAC guards: require_role, AdminDep, SuperuserDep
+modules/auth/dependencies/
+├── __init__.py       # Re-exports all dependencies, authentication, and permissions
+├── providers.py      # DI wiring only: get_auth_repository, get_auth_service
+├── authentication.py # Auth gate: oauth2_scheme, get_current_user, CurrentUserDep
+└── permissions.py    # RBAC guards: require_role, AdminDep, SuperuserDep
 ```
 
-Other modules import the gate/guards from the auth module by explicit path:
+Other modules import the gate/guards from the auth module dependencies sub-package:
 
 ```python
-from src.modules.auth.authentication import get_current_user, CurrentUserDep
-from src.modules.auth.permissions import require_role, SuperuserDep
+from src.modules.auth.dependencies import get_current_user, CurrentUserDep, require_role, SuperuserDep
 ```
 
 Each module is self-contained and manages its own dependencies.

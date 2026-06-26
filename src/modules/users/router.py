@@ -8,8 +8,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
-from src.modules.auth.authentication import get_current_user
-from src.modules.auth.permissions import require_role
+from src.modules.auth.dependencies import get_current_user, require_role
 from src.modules.users.dependencies import get_user_service
 from src.modules.users.entities import User, UserRole
 from src.modules.users.exceptions import InsufficientPermissionsError

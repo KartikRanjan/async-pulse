@@ -4,7 +4,7 @@ Builds on authentication (``get_current_user``) and the domain role hierarchy
 (``ROLE_HIERARCHY``, owned by the users module). Any protected route in any
 module can require a minimum role:
 
-    from src.modules.auth.permissions import require_role, AdminDep
+    from src.modules.auth.dependencies import require_role, AdminDep
     from src.modules.users.entities import UserRole
 
     @router.delete("/{id}")
@@ -17,9 +17,10 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from src.modules.auth.authentication import get_current_user
 from src.modules.users.entities import ROLE_HIERARCHY, User, UserRole
 from src.modules.users.exceptions import InsufficientPermissionsError
+
+from .authentication import get_current_user
 
 
 class RoleGuard:

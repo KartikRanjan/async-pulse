@@ -7,8 +7,8 @@ This is the auth gate consumed by every protected route across all modules
 - ``get_current_user``: token → session → identity → status validation
 - ``CurrentUserDep``: ready-to-use ``Annotated`` alias for clean route signatures
 
-Authorization ("what you are allowed to do" — RBAC) lives in ``permissions.py``.
-Service/repository wiring lives in ``dependencies.py``.
+Authorization ("what you are allowed to do" — RBAC) lives in ``.permissions``.
+Service/repository wiring lives in ``.providers``.
 """
 
 from typing import Annotated
@@ -19,7 +19,6 @@ from jose import JWTError
 
 from src.core.cache import CacheClient, get_cache_client
 from src.core.settings import get_settings
-from src.modules.auth.dependencies import get_auth_repository
 from src.modules.auth.entities import SessionValidation
 from src.modules.auth.exceptions import InvalidTokenError
 from src.modules.auth.repository import AuthRepository
@@ -27,6 +26,8 @@ from src.modules.users.dependencies import get_user_service
 from src.modules.users.entities import User, UserRole, UserStatus
 from src.modules.users.service import UserService
 from src.shared.security import decode_token
+
+from .providers import get_auth_repository
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{get_settings().API_V1_PREFIX}/auth/login")
 
