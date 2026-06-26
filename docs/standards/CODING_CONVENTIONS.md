@@ -85,10 +85,10 @@ modules/auth/dependencies/
 └── permissions.py    # RBAC guards: require_role, AdminDep, SuperuserDep
 ```
 
-Other modules import the gate/guards from the auth module dependencies sub-package:
+Other modules import the gate/guards from the auth module root facade:
 
 ```python
-from src.modules.auth.dependencies import get_current_user, CurrentUserDep, require_role, SuperuserDep
+from src.modules.auth import get_current_user, CurrentUserDep, require_role, SuperuserDep
 ```
 
 Each module is self-contained and manages its own dependencies.

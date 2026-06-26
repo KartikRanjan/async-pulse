@@ -123,6 +123,7 @@ HTTP Request → Router → Service → Repository → UnitOfWork / Session → 
 
 - Keep module files flat until code size grows past ~300-400 lines or starts losing cohesion.
 - Only promote a single file (like `service.py`) to a package folder (`service/`) when necessary, and maintain public exports via `__init__.py` to avoid breaking downstream import paths.
+  *(Exception: The auth module's `dependencies/` folder is a recognized exception, grouping the module's dependency wiring, authentication gates, and RBAC guards into a single sub-package for cohesion and import safety, while exposing gates/guards through the module root facade).*
 
 ---
 

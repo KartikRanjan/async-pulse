@@ -452,7 +452,7 @@ Routers consume these aliases, keeping signatures clean:
 
 ```python
 # any module's router
-from src.modules.auth.dependencies import CurrentUserDep, require_role, SuperuserDep
+from src.modules.auth import CurrentUserDep, require_role, SuperuserDep
 
 @router.get("/{user_id}", response_model=UserResponse)
 async def get_user(user_id: UUID, service: UserServiceDep):
