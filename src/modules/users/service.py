@@ -5,7 +5,7 @@ transaction boundaries.  Never imports FastAPI, requests, or responses.
 """
 
 import uuid
-from typing import Any
+from typing import Any, Protocol
 
 from src.core.cache import CacheClient
 from src.db.unit_of_work import UnitOfWork
@@ -18,6 +18,17 @@ from src.modules.users.repository import UserRepository
 from src.modules.users.schemas import UserCreate, UserUpdate
 from src.shared.security import hash_password
 
+# Statuses that must immediately lock a user out of every active session.
+_LOCKOUT_STATUSES = frozenset({UserStatus.SUSPENDED, UserStatus.BANNED})
+
+
+class SessionRevoker(Protocol):
+    """Port for terminating a user's sessions (implemented by the auth module)."""
+
+    async def revoke_user_sessions(self, user_id: str) -> None:
+        """Revoke all active sessions for the given user."""
+        ...
+
 
 class UserService:
     """Orchestrates user-related business operations."""
@@ -27,10 +38,12 @@ class UserService:
         repository: UserRepository,
         uow: UnitOfWork,
         cache: CacheClient | None = None,
+        session_revoker: SessionRevoker | None = None,
     ) -> None:
         self.repo = repository
         self.uow = uow
         self.cache = cache
+        self.session_revoker = session_revoker
 
     # ── Queries (for cross-module consumption) ────────────
 
@@ -140,6 +153,10 @@ class UserService:
             raise UserNotFoundError(user_id)
         user.transition_to(new_status)
         updated = await self.repo.set_status(user_id, status=user.status)
+        # Lock the user out of all sessions before committing, so the revocation
+        # is atomic with the status change (shared session, single transaction).
+        if self.session_revoker and user.status in _LOCKOUT_STATUSES:
+            await self.session_revoker.revoke_user_sessions(user_id)
         await self.uow.commit()
         if self.cache:
             await self.cache.delete(f"user:{user_id}")
@@ -152,6 +169,9 @@ class UserService:
             raise UserNotFoundError(user_id)
         user.deactivate()
         await self.repo.update(user, deleted_at=user.deleted_at)
+        # A deleted account must not keep any active sessions.
+        if self.session_revoker:
+            await self.session_revoker.revoke_user_sessions(user_id)
         await self.uow.commit()
         if self.cache:
             await self.cache.delete(f"user:{user_id}")

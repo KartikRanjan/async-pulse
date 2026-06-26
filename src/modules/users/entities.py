@@ -27,6 +27,16 @@ class UserRole(StrEnum):
     SUPERUSER = "superuser"
 
 
+# Role hierarchy (higher number = more privilege). This is a domain rule —
+# "who outranks whom" — so it lives next to ``UserRole``. Authorization
+# enforcement (the role guard) reads this; see ``modules/auth/permissions.py``.
+ROLE_HIERARCHY: dict[UserRole, int] = {
+    UserRole.USER: 1,
+    UserRole.ADMIN: 2,
+    UserRole.SUPERUSER: 3,
+}
+
+
 class User:
     """User domain entity — the source of truth for business rules."""
 
@@ -96,8 +106,14 @@ class User:
         self.role = UserRole.USER
 
     @property
-    def is_active(self) -> bool:
-        """Helper to check if user profile is not soft-deleted and status is active."""
+    def is_fully_active(self) -> bool:
+        """Return True only when the account is ACTIVE and not soft-deleted.
+
+        Note this is stricter than "may authenticate": PENDING_VERIFICATION
+        users are allowed to log in (see ``AuthService.authenticate``) yet are
+        not fully active. Use this for "account in good standing" checks, not as
+        a login gate.
+        """
         return self.deleted_at is None and self.status == UserStatus.ACTIVE
 
     @property

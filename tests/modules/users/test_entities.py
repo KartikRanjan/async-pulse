@@ -114,11 +114,11 @@ def test_role_promotion_and_demotion() -> None:
     assert user.role == UserRole.USER
 
 
-def test_is_active_requires_active_status_and_not_deleted() -> None:
-    """is_active is only true for an ACTIVE, non-deleted user."""
-    assert _make_user(status=UserStatus.ACTIVE).is_active is True
-    assert _make_user(status=UserStatus.SUSPENDED).is_active is False
+def test_is_fully_active_requires_active_status_and_not_deleted() -> None:
+    """is_fully_active is only true for an ACTIVE, non-deleted user."""
+    assert _make_user(status=UserStatus.ACTIVE).is_fully_active is True
+    assert _make_user(status=UserStatus.SUSPENDED).is_fully_active is False
 
     deleted = _make_user(status=UserStatus.ACTIVE)
     deleted.deactivate()
-    assert deleted.is_active is False
+    assert deleted.is_fully_active is False

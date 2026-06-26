@@ -16,14 +16,16 @@ from src.modules.users.entities import UserRole, UserStatus
 class UserRead(BaseModel):
     """Public user representation returned by the API."""
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: str
     email: EmailStr
     username: str
     status: UserStatus
     role: UserRole
-    is_active: bool
+    # Public field stays ``is_active``; sourced from the entity's renamed
+    # ``is_fully_active`` property (ACTIVE + not soft-deleted).
+    is_active: bool = Field(validation_alias="is_fully_active")
     is_superuser: bool
     created_at: datetime
     updated_at: datetime

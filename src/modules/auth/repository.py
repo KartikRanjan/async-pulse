@@ -82,17 +82,27 @@ class AuthRepository:
         return [self._to_session_entity(m) for m in models]
 
     async def update_session(self, session: UserSession) -> UserSession:
-        """Update session state (e.g. revoke or rotate token)."""
-        result = await self.session.execute(
-            select(SessionModel).where(SessionModel.id == session.id),
+        """Update session state (e.g. revoke or rotate token).
+
+        Uses ``Session.merge`` so the already-mutated entity held by the service
+        is reconciled in a single round-trip, avoiding a redundant SELECT when
+        the row is already in the identity map.
+        """
+        model = SessionModel(
+            id=session.id,
+            user_id=session.user_id,
+            refresh_token_hash=session.refresh_token_hash,
+            device_info=session.device_info,
+            ip_address=session.ip_address,
+            created_at=session.created_at,
+            expires_at=session.expires_at,
+            revoked_at=session.revoked_at,
+            previous_session_id=session.previous_session_id,
+            rotation_counter=session.rotation_counter,
         )
-        model = result.scalar_one()
-        model.refresh_token_hash = session.refresh_token_hash
-        model.revoked_at = session.revoked_at
-        model.previous_session_id = session.previous_session_id
-        model.rotation_counter = session.rotation_counter
+        merged = await self.session.merge(model)
         await self.session.flush()
-        return self._to_session_entity(model)
+        return self._to_session_entity(merged)
 
     async def revoke_all_sessions(self, user_id: str) -> None:
         """Revoke all sessions for a user (force logout everywhere)."""

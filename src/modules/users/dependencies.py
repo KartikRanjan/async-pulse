@@ -18,6 +18,20 @@ async def get_user_service(
     uow: UnitOfWork = Depends(get_unit_of_work),
     cache: CacheClient = Depends(get_cache_client),
 ) -> UserService:
-    """FastAPI dependency — yields a ``UserService`` with its repository and UoW."""
+    """FastAPI dependency — yields a ``UserService`` with its repository and UoW.
+
+    The auth-backed session revoker is composed here so status-lockout
+    operations (suspend/ban/delete) can terminate active sessions. The auth
+    import is deferred to call time because the auth module depends on the users
+    module; importing it lazily at the composition root avoids a load-time cycle.
+    """
+    from src.modules.auth import build_session_revoker
+
     repository = UserRepository(session)
-    return UserService(repository=repository, uow=uow, cache=cache)
+    session_revoker = build_session_revoker(session, cache)
+    return UserService(
+        repository=repository,
+        uow=uow,
+        cache=cache,
+        session_revoker=session_revoker,
+    )

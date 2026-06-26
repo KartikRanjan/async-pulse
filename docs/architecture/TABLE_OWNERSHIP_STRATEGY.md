@@ -28,8 +28,8 @@ select(UserModel).where(UserModel.email == email)
 Field-level privilege was enforced with runtime guards (each repository rejected
 the other's fields), but the design had real problems:
 
-1. **Violated module isolation.** `AGENTS.md` states: *"Never import another
-   module's repository, models, or internal routers directly."* Auth reached past
+1. **Violated module isolation.** `AGENTS.md` states: _"Never import another
+   module's repository, models, or internal routers directly."_ Auth reached past
    the users module's public surface into its persistence model.
 2. **Two owners of one table.** A schema change in `users` could silently break
    `auth`. The boundary existed at the field level but the coupling lived at the
@@ -57,7 +57,7 @@ auth.router → auth.service ──▶ users.service ──▶ users.repository 
 
 `UserRepository` gained explicit credential/status methods, kept separate from
 the profile-only `update()` (which still forbids `hashed_password`, `status`,
-`role`). This preserves field-level least privilege *inside* the owning module:
+`role`). This preserves field-level least privilege _inside_ the owning module:
 
 ```python
 # users/repository.py
@@ -113,7 +113,7 @@ class AuthServiceDeps:
 ```
 
 ```python
-# auth/dependencies.py
+# auth/dependencies.py — wiring only
 async def get_auth_service(
     repository: AuthRepository = Depends(get_auth_repository),
     user_service: UserService = Depends(get_user_service),

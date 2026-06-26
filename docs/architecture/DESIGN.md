@@ -7,14 +7,14 @@
 
 ## 1. Why This Project
 
-| Concept | NestJS / TypeScript | Python / FastAPI |
-|---|---|---|
-| Routing | Decorators + `@Controller` | Decorators + `@app.get()` |
-| Validation | Zod / class-validator | Pydantic (same concept, native) |
-| DI | NestJS IoC container | FastAPI `Depends()` |
-| ORM | Drizzle / TypeORM | SQLAlchemy 2.0 ORM |
-| Async | Node event loop | Python `async/await` (uvicorn + asyncio) |
-| DB Driver | pg (node-postgres) | asyncpg (native async PostgreSQL) |
+| Concept    | NestJS / TypeScript        | Python / FastAPI                         |
+| ---------- | -------------------------- | ---------------------------------------- |
+| Routing    | Decorators + `@Controller` | Decorators + `@app.get()`                |
+| Validation | Zod / class-validator      | Pydantic (same concept, native)          |
+| DI         | NestJS IoC container       | FastAPI `Depends()`                      |
+| ORM        | Drizzle / TypeORM          | SQLAlchemy 2.0 ORM                       |
+| Async      | Node event loop            | Python `async/await` (uvicorn + asyncio) |
+| DB Driver  | pg (node-postgres)         | asyncpg (native async PostgreSQL)        |
 
 FastAPI feels familiar coming from NestJS — decorators, DI, typed schemas — but
 the async model is explicit `async/await` rather than Node's implicit event loop.
@@ -87,7 +87,9 @@ async-pulse/
 │   │   │   ├── repository.py      # Data access, returns domain entities
 │   │   │   ├── entities.py        # Domain entity + business behavior
 │   │   │   ├── schemas.py         # Pydantic request/response DTOs
-│   │   │   ├── dependencies.py    # FastAPI Depends() wiring for this module
+│   │   │   ├── dependencies.py    # DI wiring (get_auth_repository, get_auth_service)
+│   │   │   ├── authentication.py  # Auth gate (oauth2_scheme, get_current_user, CurrentUserDep)
+│   │   │   ├── permissions.py     # RBAC guards (require_role, AdminDep, SuperuserDep)
 │   │   │   └── exceptions.py      # Domain exceptions (AuthError subclasses)
 │   │   │
 │   │   └── users/
@@ -213,7 +215,7 @@ single `service.py` is structure for a problem you don't have, and it adds an
 `__init__.py` indirection a reader has to step through to find the code.
 
 **Promotion rule.** When one file grows past ~300–400 lines, or holds 3+ cohesive
-groups that don't belong together, convert *that one file* into a package — a
+groups that don't belong together, convert _that one file_ into a package — a
 folder with `__init__.py` that re-exports the public names. Import paths stay
 identical, so nothing downstream changes.
 
@@ -366,6 +368,7 @@ class UserListResponse(BaseModel):
 
 **Key difference from Zod:** Pydantic validates at the schema level. FastAPI
 automatically:
+
 - Parses the request body into the typed schema
 - Returns 422 with detailed errors if validation fails
 - Generates OpenAPI docs from the schemas
@@ -375,87 +378,83 @@ No manual `req.body()` parsing — it's all automatic.
 ### 4.3 Dependency Injection
 
 AsyncPulse uses **manual dependency injection** — no runtime container. FastAPI's
-`Depends()` *is* explicit DI: you write the factory functions and FastAPI runs the
-chain per request. The composition for a feature lives in its `dependencies.py`
-(the equivalent of a NestJS `*.module.ts` file).
+`Depends()` _is_ explicit DI: you write the factory functions and FastAPI runs the
+chain per request. The auth module is split into three focused files:
+
+| File                | Responsibility                                                    |
+| ------------------- | ----------------------------------------------------------------- |
+| `dependencies.py`   | DI wiring — builds `AuthRepository` and `AuthService`             |
+| `authentication.py` | Auth gate — `oauth2_scheme`, `get_current_user`, `CurrentUserDep` |
+| `permissions.py`    | RBAC guards — `require_role`, `AdminDep`, `SuperuserDep`          |
+
+Other modules compose their own chain (`session → repository → service`) in their
+own `dependencies.py` (the equivalent of a NestJS `*.module.ts` file).
 
 ```python
 # src/modules/users/dependencies.py
 
-from typing import Annotated
-
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
+from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.settings import settings
+from src.core.cache import CacheClient, get_cache_client
 from src.db.session import get_async_session
 from src.db.unit_of_work import UnitOfWork, get_unit_of_work
-from src.modules.users.entities import User
 from src.modules.users.repository import UserRepository
 from src.modules.users.service import UserService
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
-
-# --- Composition: session → repository → service -------------------------
-
-def get_user_repository(
+async def get_user_service(
     session: AsyncSession = Depends(get_async_session),
-) -> UserRepository:
-    """Construct a UserRepository for this request.
-
-    Plain def/return — no yield, no cleanup needed. Reserve yield-dependencies
-    for things with teardown (session, Redis connection, file handle).
-    """
-    return UserRepository(session)
-
-
-def get_user_service(
-    repo: UserRepository = Depends(get_user_repository),
     uow: UnitOfWork = Depends(get_unit_of_work),
+    cache: CacheClient = Depends(get_cache_client),
 ) -> UserService:
-    """Compose the service from its dependencies (use keyword args, not positional)."""
-    return UserService(repository=repo, uow=uow)
+    """Compose the service from its dependencies (keyword args, not positional)."""
+    repository = UserRepository(session)
+    return UserService(repository=repository, uow=uow, cache=cache)
+```
+
+The authentication gate lives in `modules/auth/authentication.py`:
+
+```python
+# src/modules/auth/authentication.py
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_PREFIX}/auth/login")
 
 
 async def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    repo: UserRepository = Depends(get_user_repository),
+    authorization: str = Depends(oauth2_scheme),
+    auth_repo: AuthRepository = Depends(get_auth_repository),
+    user_service: UserService = Depends(get_user_service),
+    cache: CacheClient = Depends(get_cache_client),
 ) -> User:
-    """Extract and validate the current user from JWT. Returns a domain entity."""
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
-        user_id: str = payload.get("sub")
-        if user_id is None:
-            raise credentials_exception
-    except JWTError:
-        raise credentials_exception
-
-    user = await repo.get_by_id(user_id)
-    if user is None or not user.is_active:
-        raise credentials_exception
-    return user
+    """Token → session check → identity → status validation."""
+    ...
 
 
-# --- Annotated aliases: import these in routers --------------------------
-
-UserServiceDep = Annotated[UserService, Depends(get_user_service)]
 CurrentUserDep = Annotated[User, Depends(get_current_user)]
 ```
 
-Routers then consume the aliases, keeping signatures clean:
+Authorization guards live in `modules/auth/permissions.py`:
 
 ```python
+# src/modules/auth/permissions.py
+
+def require_role(role: UserRole) -> RoleGuard: ...
+
+AdminDep     = Annotated[User, Depends(require_role(UserRole.ADMIN))]
+SuperuserDep = Annotated[User, Depends(require_role(UserRole.SUPERUSER))]
+```
+
+Routers consume these aliases, keeping signatures clean:
+
+```python
+# any module's router
+from src.modules.auth.authentication import CurrentUserDep
+from src.modules.auth.permissions import require_role, SuperuserDep
+
 @router.get("/{user_id}", response_model=UserResponse)
 async def get_user(user_id: UUID, service: UserServiceDep):
-    return await service.get_user(user_id)
+    ...    return await service.get_user(user_id)
 ```
 
 ### 4.3.1 Dependency Injection Conventions
@@ -515,15 +514,15 @@ router (§4.11) to avoid circular imports.
 
 **Scope: singleton vs request-scoped.** Be deliberate about lifetime:
 
-- *App singletons* (created once at import or in `lifespan`): `settings`, the
+- _App singletons_ (created once at import or in `lifespan`): `settings`, the
   SQLAlchemy `engine`, the arq pool, shared HTTP clients. These are module-level
   objects, **not** `Depends`.
-- *Request-scoped* (via `Depends`): `session`, `repository`, `unit_of_work`,
+- _Request-scoped_ (via `Depends`): `session`, `repository`, `unit_of_work`,
   `service`, `current_user`. Stateful per request; must not leak across requests.
 
 **Per-request cache contract.** FastAPI calls each dependency once per request and
 caches the result. This is why `get_user_repository` and `get_unit_of_work` both
-depending on `get_async_session` share the *same* session — the repository's
+depending on `get_async_session` share the _same_ session — the repository's
 `flush` and the unit of work's `commit` act on one transaction. Do **not** create
 a fresh session inside either factory; doing so silently splits the transaction.
 

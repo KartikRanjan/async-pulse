@@ -135,10 +135,17 @@ class AuthService:
         if not session_id or not user_id:
             raise InvalidTokenError("Invalid token payload")
 
-        # 1. Grace Period Check: check if this is a concurrent request replaying the old token
+        incoming_token_hash = _hash_token(request.refresh_token)
+
+        # 1. Grace Period Check: allow a concurrent retry that replays the *exact*
+        # token that was just rotated. The cached pair is bound to the hash of the
+        # consumed token, so a different (stale) token for the same session falls
+        # through to full validation/breach detection instead of being accepted.
         grace_key = f"grace:{session_id}"
         cached_grace_tokens = await self.cache.get_json(grace_key)
-        if cached_grace_tokens:
+        if cached_grace_tokens and cached_grace_tokens.get("consumed_token_hash") == (
+            incoming_token_hash
+        ):
             return TokenPair(
                 access_token=cached_grace_tokens["access_token"],
                 refresh_token=cached_grace_tokens["refresh_token"],
@@ -164,7 +171,7 @@ class AuthService:
             raise InvalidTokenError("Session not found")
 
         # 3. Breach Detection (RTR Token Reuse)
-        token_hash = _hash_token(request.refresh_token)
+        token_hash = incoming_token_hash
         if session.is_revoked:
             # If the session was already revoked and the incoming token is
             # NOT the current active one, it indicates a leaked/stale refresh
@@ -174,6 +181,7 @@ class AuthService:
                 act_sess.revoke()
                 await self.repo.update_session(act_sess)
                 await self.cache.delete(f"session:{act_sess.id}")
+                await self.cache.delete(f"grace:{act_sess.id}")
 
             await self.uow.commit()
             raise InvalidTokenError("Token reuse detected. All sessions revoked.")
@@ -212,6 +220,9 @@ class AuthService:
             user_id=user_id,
             refresh_token_hash=_hash_token(new_refresh_token),
             expires_at=session.expires_at,
+            # device_info is inherited unchanged: the physical device does not
+            # change across a rotation. ip_address, by contrast, is taken from
+            # the current request because the client's network location can move.
             device_info=session.device_info,
             ip_address=ip_address,
             previous_session_id=session.id,
@@ -228,12 +239,13 @@ class AuthService:
             ttl=remaining_ttl,
         )
 
-        # Cache the new token pair in the grace period cache under the
-        # OLD session ID (valid for 10s)
+        # Cache the new token pair in the grace period cache under the OLD session
+        # ID (valid for 10s). The consumed token hash is stored so only a replay of
+        # the exact rotated token is served the cached pair (see grace check above).
         new_tokens = TokenPair(access_token=new_access_token, refresh_token=new_refresh_token)
         await self.cache.set_json(
             grace_key,
-            new_tokens.model_dump(),
+            {**new_tokens.model_dump(), "consumed_token_hash": token_hash},
             ttl=10,
         )
 
