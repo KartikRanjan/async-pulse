@@ -15,6 +15,12 @@ settings = get_settings()
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=settings.DEBUG,
+    connect_args={
+        "server_settings": {
+            "search_path": f'"{settings.DB_SCHEMA}",public',
+        },
+        "statement_cache_size": 0,
+    },
 )
 
 async_session_factory = async_sessionmaker(

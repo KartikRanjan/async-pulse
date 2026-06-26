@@ -4,32 +4,56 @@ Depends on the repository for data access and the Unit of Work for
 transaction boundaries.  Never imports FastAPI, requests, or responses.
 """
 
-from typing import Any
+import uuid
+from typing import Any, Protocol
 
+from src.core.cache import CacheClient
 from src.db.unit_of_work import UnitOfWork
-from src.modules.users.entities import User
+from src.modules.users.entities import User, UserStatus
 from src.modules.users.exceptions import (
     UserAlreadyExistsError,
-    UserDeactivationError,
     UserNotFoundError,
 )
 from src.modules.users.repository import UserRepository
 from src.modules.users.schemas import UserCreate, UserUpdate
 from src.shared.security import hash_password
 
+# Statuses that must immediately lock a user out of every active session.
+_LOCKOUT_STATUSES = frozenset({UserStatus.SUSPENDED, UserStatus.BANNED})
+
+
+class SessionRevoker(Protocol):
+    """Port for terminating a user's sessions (implemented by the auth module)."""
+
+    async def revoke_user_sessions(self, user_id: str) -> None:
+        """Revoke all active sessions for the given user."""
+        ...
+
 
 class UserService:
     """Orchestrates user-related business operations."""
 
-    def __init__(self, uow: UnitOfWork) -> None:
+    def __init__(
+        self,
+        repository: UserRepository,
+        uow: UnitOfWork,
+        cache: CacheClient | None = None,
+        session_revoker: SessionRevoker | None = None,
+    ) -> None:
+        self.repo = repository
         self.uow = uow
+        self.cache = cache
+        self.session_revoker = session_revoker
 
-    @property
-    def repo(self) -> UserRepository:
-        """Shortcut to the user repository on the current UoW."""
-        if self.uow.users is None:
-            raise RuntimeError("UserService.repo accessed before UnitOfWork was entered")
-        return self.uow.users
+    # ── Queries (for cross-module consumption) ────────────
+
+    async def get_user_by_email(self, email: str) -> User | None:
+        """Fetch a user by email. Returns ``None`` if not found."""
+        return await self.repo.get_by_email(email)
+
+    async def get_user_by_id(self, user_id: str) -> User | None:
+        """Fetch a user by ID. Returns ``None`` if not found."""
+        return await self.repo.get_by_id(user_id)
 
     # ── Commands ──────────────────────────────────────────
 
@@ -41,10 +65,15 @@ class UserService:
                 raise UserAlreadyExistsError("A user with this email already exists")
             raise UserAlreadyExistsError("A user with this username already exists")
 
+        # New users start ACTIVE with the default USER role. (Email verification
+        # is not yet implemented; when it is, create as PENDING_VERIFICATION and
+        # add a verification endpoint that transitions the user to ACTIVE.)
         user = await self.repo.create(
+            user_id=str(uuid.uuid4()),
             email=payload.email,
             username=payload.username,
             hashed_password=hash_password(payload.password),
+            status=UserStatus.ACTIVE,
         )
         await self.uow.commit()
         return user
@@ -67,7 +96,7 @@ class UserService:
         *,
         current_user_id: str | None = None,
     ) -> User:
-        """Update a user's fields. Raises ``UserNotFoundError`` if missing."""
+        """Update a user's profile fields. Raises ``UserNotFoundError`` if missing."""
         user = await self.repo.get_by_id(user_id)
         if not user:
             raise UserNotFoundError(user_id)
@@ -83,23 +112,66 @@ class UserService:
             if existing and existing.id != user_id:
                 raise UserAlreadyExistsError("A user with this username already exists")
             update_fields["username"] = payload.username
-        if payload.password is not None:
-            update_fields["hashed_password"] = hash_password(payload.password)
-        if payload.is_active is not None:
-            if current_user_id and user_id == current_user_id and not payload.is_active:
-                raise UserDeactivationError()
-            update_fields["is_active"] = payload.is_active
 
         if update_fields:
             user = await self.repo.update(user, **update_fields)
             await self.uow.commit()
+            if self.cache:
+                await self.cache.delete(f"user:{user_id}")
 
         return user
 
-    async def delete_user(self, user_id: str) -> None:
-        """Delete a user. Raises ``UserNotFoundError`` if missing."""
+    # ── Privileged commands (credential / status) ─────────
+    #
+    # The users module owns the ``users`` table, so all writes to the
+    # security-sensitive columns flow through here. Other modules (e.g. auth)
+    # call these via the public ``UserService`` API instead of reaching into
+    # the users persistence model directly.
+
+    async def set_password(self, user_id: str, new_password: str) -> User:
+        """Set a new password hash for a user. Raises ``UserNotFoundError`` if missing."""
         user = await self.repo.get_by_id(user_id)
         if not user:
             raise UserNotFoundError(user_id)
-        await self.repo.delete(user_id)
+        updated = await self.repo.set_credentials(
+            user_id,
+            hashed_password=hash_password(new_password),
+        )
         await self.uow.commit()
+        if self.cache:
+            await self.cache.delete(f"user:{user_id}")
+        return updated
+
+    async def change_status(self, user_id: str, new_status: UserStatus) -> User:
+        """Transition a user's lifecycle status, enforcing entity state-machine rules.
+
+        Raises ``UserNotFoundError`` if missing and ``InvalidStatusTransitionError``
+        if the transition is not allowed.
+        """
+        user = await self.repo.get_by_id(user_id)
+        if not user:
+            raise UserNotFoundError(user_id)
+        user.transition_to(new_status)
+        updated = await self.repo.set_status(user_id, status=user.status)
+        # Lock the user out of all sessions before committing, so the revocation
+        # is atomic with the status change (shared session, single transaction).
+        if self.session_revoker and user.status in _LOCKOUT_STATUSES:
+            await self.session_revoker.revoke_user_sessions(user_id)
+        await self.uow.commit()
+        if self.cache:
+            await self.cache.delete(f"user:{user_id}")
+        return updated
+
+    async def delete_user(self, user_id: str) -> None:
+        """Soft-delete a user. Raises ``UserNotFoundError`` if missing."""
+        user = await self.repo.get_by_id(user_id)
+        if not user:
+            raise UserNotFoundError(user_id)
+        user.deactivate()
+        await self.repo.update(user, deleted_at=user.deleted_at)
+        # A deleted account must not keep any active sessions.
+        if self.session_revoker:
+            await self.session_revoker.revoke_user_sessions(user_id)
+        await self.uow.commit()
+        if self.cache:
+            await self.cache.delete(f"user:{user_id}")

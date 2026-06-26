@@ -8,18 +8,24 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+from src.modules.users.entities import UserRole, UserStatus
+
 # ── Response schemas (public) ─────────────────────────────
 
 
 class UserRead(BaseModel):
     """Public user representation returned by the API."""
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: str
     email: EmailStr
     username: str
-    is_active: bool
+    status: UserStatus
+    role: UserRole
+    # Public field stays ``is_active``; sourced from the entity's renamed
+    # ``is_fully_active`` property (ACTIVE + not soft-deleted).
+    is_active: bool = Field(validation_alias="is_fully_active")
     is_superuser: bool
     created_at: datetime
     updated_at: datetime
@@ -41,5 +47,3 @@ class UserUpdate(BaseModel):
 
     email: EmailStr | None = None
     username: str | None = Field(default=None, min_length=3, max_length=100)
-    password: str | None = Field(default=None, min_length=8)
-    is_active: bool | None = None

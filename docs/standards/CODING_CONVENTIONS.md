@@ -37,14 +37,14 @@ Work independently.
 
 Each layer has a single responsibility.
 
-| Layer        | Responsibility                                              |
-| ------------ | ----------------------------------------------------------- |
-| Middleware   | CORS, request-id injection, access logging, preprocessing   |
-| Router       | Parse/validate HTTP request, call service, shape response   |
-| Service      | Use-case orchestration and business logic (framework-free)  |
-| Domain Entity| Business invariants and behavior, separate from persistence |
-| Repository   | Database queries; maps persistence model ↔ domain entity    |
-| Unit of Work | Transaction boundary (commit / rollback) — sibling to repo  |
+| Layer         | Responsibility                                              |
+| ------------- | ----------------------------------------------------------- |
+| Middleware    | CORS, request-id injection, access logging, preprocessing   |
+| Router        | Parse/validate HTTP request, call service, shape response   |
+| Service       | Use-case orchestration and business logic (framework-free)  |
+| Domain Entity | Business invariants and behavior, separate from persistence |
+| Repository    | Database queries; maps persistence model ↔ domain entity    |
+| Unit of Work  | Transaction boundary (commit / rollback) — sibling to repo  |
 
 The validation, response-modeling, and exception-translation concerns are handled
 declaratively by FastAPI + Pydantic and by central exception handlers rather than
@@ -74,6 +74,23 @@ src/modules/users/
 └── __init__.py        # Public surface (re-exports service/entities/types)
 ```
 
+The **auth module** promotes its single `dependencies.py` into three focused files
+because authentication and authorization are genuinely distinct concerns:
+
+```
+modules/auth/dependencies/
+├── __init__.py       # Re-exports all dependencies, authentication, and permissions
+├── providers.py      # DI wiring only: get_auth_repository, get_auth_service
+├── authentication.py # Auth gate: oauth2_scheme, get_current_user, CurrentUserDep
+└── permissions.py    # RBAC guards: require_role, AdminDep, SuperuserDep
+```
+
+Other modules import the gate/guards from the auth module root facade:
+
+```python
+from src.modules.auth import get_current_user, CurrentUserDep, require_role, SuperuserDep
+```
+
 Each module is self-contained and manages its own dependencies.
 
 ### Flat first, promote when needed
@@ -85,9 +102,9 @@ let each hold as many classes as its concern needs (`models.py` may define
 Do **not** create a folder-per-concern up front. **Promote when cohesion drops,
 not when line count alone grows.** A 500-line service file that handles one
 tightly related concern is fine; a 150-line file mixing three unrelated concerns
-is not. Line count (~300–400 lines) is a *signal* to re-examine cohesion, not an
+is not. Line count (~300–400 lines) is a _signal_ to re-examine cohesion, not an
 automatic trigger. When a file genuinely holds 3+ groups that don't belong
-together, promote *that one file* into a package — a folder with `__init__.py`
+together, promote _that one file_ into a package — a folder with `__init__.py`
 that re-exports the public names. Import paths stay identical, so nothing
 downstream changes.
 
@@ -107,7 +124,7 @@ Consumers still write `from src.modules.users.service import RegistrationService
 ## 3. Dependency Injection (FastAPI `Depends`)
 
 The project uses **manual dependency injection** — no runtime container. FastAPI's
-`Depends()` *is* explicit DI: you write the factory functions, FastAPI runs the
+`Depends()` _is_ explicit DI: you write the factory functions, FastAPI runs the
 chain per request and caches each result for the request's lifetime. The
 composition for a feature lives in its `dependencies.py` (the equivalent of a
 NestJS `*.module.ts` file).
@@ -198,7 +215,7 @@ logger = get_logger(__name__)
 
 - **App singletons** (created once at import or in `lifespan`): `settings`, the
   SQLAlchemy `engine`, the arq pool, shared HTTP clients. These are module-level
-  objects, *not* `Depends`.
+  objects, _not_ `Depends`.
 - **Request-scoped** (via `Depends`): `session`, `repository`, `unit_of_work`,
   `service`, `current_user`. Stateful per request; must not leak across requests.
 
@@ -211,7 +228,7 @@ resources with cleanup (session, Redis connection, file handle).
 
 FastAPI calls each dependency once per request and caches the result. This is why
 `get_user_repository` and `get_unit_of_work` both depending on
-`get_async_session` share the *same* session — the repository's `flush` and the
+`get_async_session` share the _same_ session — the repository's `flush` and the
 unit of work's `commit` act on one transaction. Never create a fresh session
 inside a factory; doing so silently splits the transaction.
 
@@ -246,7 +263,7 @@ def require_self_or_superuser(user_id: UUID, current_user: User) -> None:
         raise HTTPException(status_code=403, detail="Not authorized")
 ```
 
-> `HTTPException` is acceptable in the router/dependency layer (it *is* the HTTP
+> `HTTPException` is acceptable in the router/dependency layer (it _is_ the HTTP
 > layer). It must never appear in services — raise a domain exception there and
 > let the central handler in §11 translate it to HTTP.
 
@@ -359,7 +376,7 @@ async def add(self, user: User) -> User:
 Responsibilities:
 
 - Contain database queries (pure SQLAlchemy 2.0: `select()` + `session.execute()`
-  + `scalar_one_or_none()` / `scalars().all()`)
+  - `scalar_one_or_none()` / `scalars().all()`)
 - Map model ↔ domain entity
 - `flush` but **never** `commit` (the Unit of Work owns transactions, §12)
 - No business logic
@@ -421,7 +438,7 @@ class UserCreate(BaseModel):
     full_name: str | None = None
 ```
 
-Routers receive validated data only — the schema type *is* the validation
+Routers receive validated data only — the schema type _is_ the validation
 contract.
 
 ---
@@ -606,22 +623,22 @@ async def register_user(self, dto):
 Follow PEP 8: `snake_case` for modules, functions, and variables;
 `PascalCase` for classes; `UPPER_SNAKE_CASE` for constants.
 
-| Component            | Convention                                  |
-| -------------------- | ------------------------------------------- |
-| Module files         | `service.py`, `repository.py`, `router.py`  |
-| Packages / folders   | `users/`, `auth/` (lowercase, singular noun)|
-| Classes              | `UserService`, `UserRepository`             |
-| Persistence models   | `UserModel` (suffix `Model`)                |
-| Domain entities      | `User` (no suffix)                          |
-| Read projections     | `UserDetails`, `UserWithDisplay` (descriptive noun suffix) |
-| Request/response DTOs | `UserCreate`, `UserUpdate`, `UserResponse` |
-| Domain exceptions    | `UserNotFound`, `EmailAlreadyExists`        |
-| Dependency factories | `get_user_service`, `get_user_repository`   |
-| `Annotated` aliases  | `UserServiceDep`, `CurrentUserDep`          |
-| Functions / vars     | `snake_case`                                |
-| Constants            | `ACCESS_TOKEN_EXPIRE_MINUTES`               |
+| Component             | Convention                                                 |
+| --------------------- | ---------------------------------------------------------- |
+| Module files          | `service.py`, `repository.py`, `router.py`                 |
+| Packages / folders    | `users/`, `auth/` (lowercase, singular noun)               |
+| Classes               | `UserService`, `UserRepository`                            |
+| Persistence models    | `UserModel` (suffix `Model`)                               |
+| Domain entities       | `User` (no suffix)                                         |
+| Read projections      | `UserDetails`, `UserWithDisplay` (descriptive noun suffix) |
+| Request/response DTOs | `UserCreate`, `UserUpdate`, `UserResponse`                 |
+| Domain exceptions     | `UserNotFound`, `EmailAlreadyExists`                       |
+| Dependency factories  | `get_user_service`, `get_user_repository`                  |
+| `Annotated` aliases   | `UserServiceDep`, `CurrentUserDep`                         |
+| Functions / vars      | `snake_case`                                               |
+| Constants             | `ACCESS_TOKEN_EXPIRE_MINUTES`                              |
 
-Because the layer is conveyed by the *file* (`service.py`) inside a feature
+Because the layer is conveyed by the _file_ (`service.py`) inside a feature
 folder, class names don't repeat the folder (`users/service.py → UserService`,
 not `UsersUserService`).
 
@@ -673,7 +690,7 @@ from src.modules.users.service import UserService
 ### Import style rules
 
 1. **Absolute imports** rooted at `src.` for anything cross-package. Relative
-   imports are acceptable only *within the same module* for closely related files.
+   imports are acceptable only _within the same module_ for closely related files.
 2. **No wildcard imports** (`from x import *`) outside a deliberate package
    `__init__.py` re-export.
 3. **No default-export equivalents.** Python has none; export named symbols and
@@ -839,6 +856,7 @@ Tests use **pytest + pytest-asyncio + httpx**, mirroring the module layout under
 ### Repository tests
 
 Exercise data access against a real test database session.
+
 ```
 tests/modules/users/test_repository.py
 ```
@@ -847,6 +865,7 @@ tests/modules/users/test_repository.py
 
 Test business logic with a fake or in-memory repository; assert that domain
 exceptions are raised.
+
 ```
 tests/modules/users/test_service.py
 ```
@@ -856,6 +875,7 @@ tests/modules/users/test_service.py
 Use httpx `AsyncClient` over the ASGI app to test the full path
 `router → service → repository`, with `get_async_session` overridden via
 `app.dependency_overrides`.
+
 ```
 tests/modules/users/test_router.py
 ```

@@ -1,0 +1,62 @@
+# Pre-commit hooks for AsyncPulse.
+#
+# Hooks run the SAME pinned tools as the project (via `uv run`) so versions
+# never drift from `pyproject.toml`. See docs/standards/TOOLS.md §11.
+#
+# Setup:
+#   uv run pre-commit install                 # install the git pre-commit hook
+#   uv run pre-commit install --hook-type pre-push   # enable the pre-push hook
+#
+# Run manually against all files:
+#   uv run pre-commit run --all-files
+default_install_hook_types: [pre-commit, pre-push]
+fail_fast: false
+
+repos:
+  # ── Generic hygiene (fast, fix-in-place) ──────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+  # ── Project tools (local, pinned via pyproject + uv) ──────
+  - repo: local
+    hooks:
+      - id: ruff-format
+        name: ruff format
+        entry: uv run ruff format
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
+
+      - id: ruff-check
+        name: ruff check (with --fix)
+        entry: uv run ruff check --fix
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
+
+      - id: pyright
+        name: pyright (strict)
+        entry: uv run pyright src/
+        language: system
+        types_or: [python, pyi]
+        pass_filenames: false
+        require_serial: true
+
+      # pytest is slower; gate it on push rather than every commit.
+      - id: pytest
+        name: pytest
+        entry: uv run pytest tests/ --tb=short -q
+        language: system
+        types: [python]
+        pass_filenames: false
+        stages: [pre-push]
+        require_serial: true

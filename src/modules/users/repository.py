@@ -5,13 +5,12 @@ Handles SQLAlchemy queries and maps between persistence models
 Never commits — transaction boundaries are managed by the Unit of Work.
 """
 
-import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.modules.users.entities import User
+from src.modules.users.entities import User, UserStatus
 from src.modules.users.models import UserModel
 
 
@@ -31,8 +30,9 @@ class UserRepository:
             email=model.email,
             username=model.username,
             hashed_password=model.hashed_password,
-            is_active=model.is_active,
-            is_superuser=model.is_superuser,
+            status=model.status,
+            role=model.role,
+            deleted_at=model.deleted_at,
             created_at=model.created_at,
             updated_at=model.updated_at,
         )
@@ -40,25 +40,34 @@ class UserRepository:
     # ── Reads ─────────────────────────────────────────────
 
     async def get_by_id(self, user_id: str) -> User | None:
-        """Fetch a user by primary key."""
+        """Fetch a user by primary key if not soft-deleted."""
         result = await self.session.execute(
-            select(UserModel).where(UserModel.id == user_id),
+            select(UserModel).where(
+                UserModel.id == user_id,
+                UserModel.deleted_at.is_(None),
+            ),
         )
         model = result.scalar_one_or_none()
         return self._to_entity(model) if model else None
 
     async def get_by_email(self, email: str) -> User | None:
-        """Fetch a user by email address."""
+        """Fetch a user by email address if not soft-deleted."""
         result = await self.session.execute(
-            select(UserModel).where(UserModel.email == email),
+            select(UserModel).where(
+                UserModel.email == email,
+                UserModel.deleted_at.is_(None),
+            ),
         )
         model = result.scalar_one_or_none()
         return self._to_entity(model) if model else None
 
     async def get_by_username(self, username: str) -> User | None:
-        """Fetch a user by username."""
+        """Fetch a user by username if not soft-deleted."""
         result = await self.session.execute(
-            select(UserModel).where(UserModel.username == username),
+            select(UserModel).where(
+                UserModel.username == username,
+                UserModel.deleted_at.is_(None),
+            ),
         )
         model = result.scalar_one_or_none()
         return self._to_entity(model) if model else None
@@ -66,18 +75,27 @@ class UserRepository:
     async def get_by_email_or_username(self, email: str, username: str) -> User | None:
         """Check if a user exists with the given email *or* username (single query)."""
         result = await self.session.execute(
-            select(UserModel).where(or_(UserModel.email == email, UserModel.username == username)),
+            select(UserModel).where(
+                or_(UserModel.email == email, UserModel.username == username),
+                UserModel.deleted_at.is_(None),
+            ),
         )
         model = result.scalar_one_or_none()
         return self._to_entity(model) if model else None
 
     async def list_users(self, offset: int, limit: int) -> tuple[list[User], int]:
-        """Return a paginated list of users and the total count."""
-        count_result = await self.session.execute(select(func.count()).select_from(UserModel))
+        """Return a paginated list of active users and the total count."""
+        count_result = await self.session.execute(
+            select(func.count()).select_from(UserModel).where(UserModel.deleted_at.is_(None))
+        )
         total = count_result.scalar_one()
 
         result = await self.session.execute(
-            select(UserModel).order_by(UserModel.created_at.desc()).offset(offset).limit(limit),
+            select(UserModel)
+            .where(UserModel.deleted_at.is_(None))
+            .order_by(UserModel.created_at.desc())
+            .offset(offset)
+            .limit(limit),
         )
         models = result.scalars().all()
         return [self._to_entity(m) for m in models], total
@@ -87,16 +105,19 @@ class UserRepository:
     async def create(
         self,
         *,
+        user_id: str,
         email: str,
         username: str,
         hashed_password: str,
+        status: UserStatus = UserStatus.ACTIVE,
     ) -> User:
         """Persist a new user and return the domain entity."""
         model = UserModel(
-            id=str(uuid.uuid4()),
+            id=user_id,
             email=email,
             username=username,
             hashed_password=hashed_password,
+            status=status,
             created_at=datetime.now(UTC),
             updated_at=datetime.now(UTC),
         )
@@ -105,7 +126,11 @@ class UserRepository:
         return self._to_entity(model)
 
     async def update(self, user: User, **fields: object) -> User:
-        """Update a user's fields and return the refreshed domain entity."""
+        """Update a user's profile fields. Enforces field privilege separation."""
+        forbidden = {"hashed_password", "status", "role"}
+        if any(f in fields for f in forbidden):
+            raise TypeError("UserRepository cannot modify security, credential, or status fields")
+
         result = await self.session.execute(
             select(UserModel).where(UserModel.id == user.id),
         )
@@ -116,8 +141,38 @@ class UserRepository:
         await self.session.flush()
         return self._to_entity(model)
 
+    # ── Privileged Writes (credential / status) ───────────
+    #
+    # These are the single owner of the security-sensitive columns on the
+    # ``users`` table. They are intentionally separate from ``update`` (which
+    # forbids these fields) so that profile updates can never touch credentials
+    # or status. Cross-module callers (e.g. the auth module) reach these only
+    # through ``UserService``, never the repository directly.
+
+    async def set_credentials(self, user_id: str, *, hashed_password: str) -> User:
+        """Update a user's password hash. Privileged credential operation."""
+        result = await self.session.execute(
+            select(UserModel).where(UserModel.id == user_id),
+        )
+        model = result.scalar_one()
+        model.hashed_password = hashed_password
+        model.updated_at = datetime.now(UTC)
+        await self.session.flush()
+        return self._to_entity(model)
+
+    async def set_status(self, user_id: str, *, status: UserStatus) -> User:
+        """Update a user's lifecycle status. Privileged operation."""
+        result = await self.session.execute(
+            select(UserModel).where(UserModel.id == user_id),
+        )
+        model = result.scalar_one()
+        model.status = status
+        model.updated_at = datetime.now(UTC)
+        await self.session.flush()
+        return self._to_entity(model)
+
     async def delete(self, user_id: str) -> None:
-        """Soft-delete is preferred — this performs a hard delete."""
+        """Perform a hard delete of the user model (admin functionality)."""
         result = await self.session.execute(
             select(UserModel).where(UserModel.id == user_id),
         )

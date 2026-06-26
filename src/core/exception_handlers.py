@@ -20,8 +20,10 @@ def _status_code_map() -> dict[int, str]:
     return {code.value: code.phrase.replace(" ", "_").upper() for code in http.HTTPStatus}
 
 
-async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+async def http_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Handle FastAPI HTTPExceptions with standardized error envelope."""
+    if not isinstance(exc, HTTPException):  # pragma: no cover - registered per type
+        raise exc
     detail = exc.detail
     path = request.url.path
 
@@ -42,8 +44,10 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
     return JSONResponse(status_code=exc.status_code, content=content)
 
 
-async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
+async def app_error_handler(_request: Request, exc: Exception) -> JSONResponse:
     """Translate any ``AppError`` subclass into a standardized JSON response."""
+    if not isinstance(exc, AppError):  # pragma: no cover - registered per type
+        raise exc
     if exc.error_code:
         error_code = exc.error_code.upper()
     else:
