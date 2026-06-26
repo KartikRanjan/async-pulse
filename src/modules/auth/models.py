@@ -6,7 +6,7 @@ Supports Refresh Token Rotation (RTR) and token tracking/revocation.
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Uuid
+from sqlalchemy import DateTime, ForeignKey, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.db.base import Base
@@ -17,7 +17,12 @@ def _utcnow() -> datetime:
 
 
 class SessionModel(Base):
-    """Session persistence model — maps to the ``sessions`` table."""
+    """Session persistence model — maps to the ``sessions`` table.
+
+    Supports Refresh Token Rotation (RTR) with token reuse detection via the
+    revoked_at timestamp and jti (session id) lookup. The id field serves as
+    the jti embedded in refresh JWT tokens.
+    """
 
     __tablename__ = "sessions"
 
@@ -32,7 +37,6 @@ class SessionModel(Base):
         nullable=False,
         index=True,
     )
-    refresh_token_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     device_info: Mapped[str | None] = mapped_column(String(255), nullable=True)
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
@@ -43,4 +47,3 @@ class SessionModel(Base):
         ForeignKey("sessions.id", ondelete="SET NULL"),
         nullable=True,
     )
-    rotation_counter: Mapped[int] = mapped_column(Integer, default=0)

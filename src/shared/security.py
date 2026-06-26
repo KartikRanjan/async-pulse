@@ -40,10 +40,22 @@ def create_access_token(subject: str, session_id: str | None = None) -> str:
     return _create_token(subject, expires, token_type="access", session_id=session_id)
 
 
-def create_refresh_token(subject: str, session_id: str) -> str:
-    """Create a long-lived refresh token with a session ID (jti) for RTR."""
+def create_refresh_token(subject: str, session_id: str, expires_in: int | None = None) -> str:
+    """Create a long-lived refresh token with a session ID (jti) for RTR.
+
+    Args:
+        subject: The user ID to embed as ``sub``.
+        session_id: The session UUID to embed as ``jti``.
+        expires_in: Optional TTL in seconds. When provided (e.g. during token
+            rotation), the JWT expiry is capped to the remaining chain lifetime
+            instead of stamping a fresh full-length expiry. When omitted (e.g.
+            at initial login), falls back to ``REFRESH_TOKEN_EXPIRE_DAYS``.
+    """
     settings = get_settings()
-    expires = timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    if expires_in is not None:
+        expires = timedelta(seconds=expires_in)
+    else:
+        expires = timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     return _create_token(subject, expires, token_type="refresh", session_id=session_id)
 
 

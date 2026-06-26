@@ -162,7 +162,6 @@ async def test_logout_revokes_existing_session(
     session = UserSession(
         session_id="session-1",
         user_id="user-1",
-        refresh_token_hash="hash",
         expires_at=datetime.now(UTC) + timedelta(days=1),
     )
     repo.get_session_by_id.return_value = session

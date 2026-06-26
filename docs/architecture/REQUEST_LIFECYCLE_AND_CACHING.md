@@ -105,12 +105,11 @@ sequenceDiagram
 
         AuthSvc->>AuthSvc: Generate session_id (UUID)
         AuthSvc->>AuthSvc: Create access_token (JWT)
-        AuthSvc->>AuthSvc: Create refresh_token (JWT)
-        AuthSvc->>AuthSvc: Hash refresh token (SHA-256)
+        AuthSvc->>AuthSvc: Create refresh_token (JWT, jti=session_id)
 
         AuthSvc->>DB: INSERT INTO sessions
 
-        AuthSvc->>Cache: set_json(session:{session_id}, {...}, ttl=REFRESH_TOKEN_EXPIRE_DAYS≈7d)
+        AuthSvc->>Cache: set_json(session:{session_id}, {id,user_id,expires_at,revoked_at}, ttl≈7d)
 
         AuthSvc-->>Router: TokenPair(access, refresh)
         Router->>Router: Set refresh as httpOnly cookie
@@ -120,9 +119,9 @@ sequenceDiagram
 
 **What's created:**
 
-- Session in DB: `id`, `user_id`, `refresh_token_hash`, `device_info`, `ip_address`, `expires_at`
+- Session in DB: `id`, `user_id`, `device_info`, `ip_address`, `created_at`, `expires_at`, `previous_session_id`
 - Tokens: access (~30 min), refresh (~7 days)
-- Cache: `session:{id}` with TTL = `REFRESH_TOKEN_EXPIRE_DAYS` (~7 days at login)
+- Cache: `session:{id}` holds only the validation projection — `id`, `user_id`, `expires_at`, `revoked_at` (TTL = `REFRESH_TOKEN_EXPIRE_DAYS`, ~7 days at login). Forensic/UI metadata stays in the DB and off the hot path.
 
 ---
 
@@ -216,66 +215,62 @@ sequenceDiagram
 
     AuthSvc->>AuthSvc: decode_token(refresh_token)<br/>Extract: user_id, session_id
 
-    note over AuthSvc,Cache: ⏱️ GRACE PERIOD CHECK<br/>(handle concurrent retries)
-    AuthSvc->>Cache: get_json(grace:{session_id})
+    note over AuthSvc,DB: 1️⃣ AUTHORITATIVE READ (DB, not cache)
+    AuthSvc->>DB: SELECT * FROM sessions WHERE id=?
 
-    alt 💚 Found & hash matches
-        Cache-->>AuthSvc: {cached_tokens, consumed_token_hash}
-        AuthSvc->>AuthSvc: Verify incoming hash == consumed hash
-
-        alt ✅ Match (retry of same request)
-            AuthSvc-->>Router: Return cached tokens<br/>(no DB, no rotation)
-            Router-->>Client: 200 OK
-        else ❌ Mismatch (different stale token)
-            note over AuthSvc: Fall through to full validation
-        end
-    else 🔴 Not found
-        note over AuthSvc,DB: Retrieve & validate old session
-        AuthSvc->>Cache: get_json(session:{session_id})
-
-        alt Cache miss
-            AuthSvc->>DB: SELECT * FROM sessions WHERE id=?
-            AuthSvc->>Cache: Warm cache
-        end
-
-        AuthSvc->>AuthSvc: Check if session.is_revoked
-
-        alt ⚠️ Already revoked
-            note over AuthSvc: 🚨 BREACH DETECTED<br/>Stale token replay!
-            AuthSvc->>DB: SELECT all active sessions for user
-            AuthSvc->>DB: Revoke ALL sessions
-            AuthSvc->>Cache: Delete session:{id}, grace:{id}
+    alt 🔴 Not found
+        AuthSvc-->>Router: InvalidTokenError
+        Router-->>Client: 401 Unauthorized
+    else ⚠️ Revoked
+        note over AuthSvc: revoked_ago = now - DB revoked_at
+        alt ⏱️ Within 30s grace window
+            note over AuthSvc,Cache: Benign concurrent race.<br/>Redis replay is UX-only.
+            AuthSvc->>Cache: get_json(grace:{session_id})
+            alt 💚 Cached pair present
+                Cache-->>AuthSvc: {access, refresh}
+                AuthSvc-->>Router: Return cached tokens (no rotation)
+                Router-->>Client: 200 OK
+            else 🔴 Miss / Redis outage
+                AuthSvc-->>Router: InvalidTokenError ("please retry")
+                Router-->>Client: 401 Unauthorized
+            end
+        else 🚨 Outside grace window
+            note over AuthSvc: BREACH — genuine token reuse
+            AuthSvc->>AuthSvc: logout_all(user_id)
+            AuthSvc->>DB: Bulk revoke ALL active sessions
+            AuthSvc->>Cache: Delete session:{id}, grace:{id} (each)
             AuthSvc-->>Router: InvalidTokenError
             Router-->>Client: 401 Unauthorized
-        else ✅ Active
-            AuthSvc->>AuthSvc: Verify token hash == stored hash
-            AuthSvc->>AuthSvc: Validate user status
-
-            note over AuthSvc,DB: 🔄 ATOMIC ROTATION
-            AuthSvc->>DB: Revoke old session (set revoked_at=NOW())
-            AuthSvc->>Cache: delete(session:{old_id})
-
-            AuthSvc->>AuthSvc: Generate new session_id
-            AuthSvc->>AuthSvc: Create new tokens (access + refresh)
-
-            AuthSvc->>DB: INSERT new session
-            AuthSvc->>DB: commit()
-
-            AuthSvc->>Cache: set(session:{new_id}, {...}, ttl=remaining_ttl)
-            AuthSvc->>Cache: set(grace:{old_id}, {...}, ttl=10s)
-
-            AuthSvc-->>Router: TokenPair(new access, new refresh)
-            Router->>Router: Set new refresh cookie
-            Router-->>Client: 200 OK + new tokens
         end
+    else ✅ Active
+        AuthSvc->>AuthSvc: Check is_expired
+        AuthSvc->>AuthSvc: Validate user status
+
+        note over AuthSvc,DB: 🔄 ATOMIC ROTATION
+        AuthSvc->>DB: Revoke old session (set revoked_at=NOW())
+        AuthSvc->>Cache: delete(session:{old_id})
+
+        AuthSvc->>AuthSvc: Generate new session_id
+        AuthSvc->>AuthSvc: remaining = chain expires_at - now<br/>Create tokens (refresh capped to remaining)
+
+        AuthSvc->>DB: INSERT new session (inherits device_info, prev chain)
+        AuthSvc->>DB: commit()
+
+        AuthSvc->>Cache: set(session:{new_id}, {id,user_id,expires_at,revoked_at}, ttl=remaining)
+        AuthSvc->>Cache: set(grace:{old_id}, {access,refresh}, ttl=30s)
+
+        AuthSvc-->>Router: TokenPair(new access, new refresh)
+        Router->>Router: Set new refresh cookie
+        Router-->>Client: 200 OK + new tokens
     end
 ```
 
 **RTR mechanics:**
 
-- **Grace period**: 10 second window to handle retries (same client, same request)
-- **Breach detection**: If a rotated session is used after being revoked → revoke all sessions
-- **Consumed token hash**: Stored in grace cache to ensure only exact token replay hits cache
+- **Authoritative read**: Refresh reads the session row from the DB (not the cache). Rotation is a security-critical write that runs at most once per access-token lifetime, so the DB `revoked_at` is the source of truth.
+- **Grace period**: 30-second window to handle benign concurrent retries, **gated on the DB `revoked_at` timestamp** — not on the presence of a Redis key. A Redis outage can therefore never trigger a false `logout_all`.
+- **Redis replay**: Within the grace window, Redis is consulted only to return the identical new token pair to a losing concurrent caller. A miss is a safe `401` ("please retry"), never a breach.
+- **Breach detection**: A revoked session replayed _outside_ the grace window → genuine reuse → `logout_all` (single atomic bulk revoke).
 
 ---
 
@@ -571,9 +566,9 @@ stateDiagram-v2
     CanUseToken --> AccessExpired: JWT expired
     AccessExpired --> RefreshFlow: Use refresh token
 
-    RefreshFlow --> GracePeriod: Within 10s window?
-    GracePeriod --> ReturnCached: ✅ Return cached pair
-    GracePeriod --> RotateToken: No, do rotation
+    RefreshFlow --> GracePeriod: Revoked < 30s ago? (DB ts)
+    GracePeriod --> ReturnCached: ✅ Replay cached pair (or 401 retry)
+    GracePeriod --> RotateToken: Active session, do rotation
 
     RotateToken --> RevokeOld: Mark old revoked
     RevokeOld --> CreateNew: New session + tokens
@@ -624,8 +619,8 @@ stateDiagram-v2
 
 ### Invariant 3: Grace Period Prevents Storms
 
-- 10-second window for concurrent retry detection
-- Hash verification ensures exact token replay
+- 30-second window for benign concurrent retry detection, gated on the DB `revoked_at` timestamp
+- Redis is a UX optimization only; a miss yields a safe 401, never a false breach
 - Prevents rotation loops from network retries
 
 ### Invariant 4: Per-Request Services Are Safe
@@ -671,7 +666,7 @@ into the service layer where data access belongs.
 | `UserService`         | Per-request | Dependency resolution | Request end                                                                    |
 | `session:{sid}` cache | TTL         | Login/refresh         | Logout/revoke; else ~7d (login), `remaining_ttl` (refresh), or 3600s (re-warm) |
 | `user:{uid}` cache    | TTL         | First access          | Invalidation or 1 hour                                                         |
-| `grace:{sid}` cache   | TTL         | Rotation              | Grace timeout or 10s                                                           |
+| `grace:{sid}` cache   | TTL         | Rotation              | Grace timeout or 30s                                                           |
 
 **Flow summary:**
 

@@ -29,14 +29,12 @@ class AuthRepository:
         return UserSession(
             session_id=model.id,
             user_id=model.user_id,
-            refresh_token_hash=model.refresh_token_hash,
             expires_at=model.expires_at,
             device_info=model.device_info,
             ip_address=model.ip_address,
             created_at=model.created_at,
             revoked_at=model.revoked_at,
             previous_session_id=model.previous_session_id,
-            rotation_counter=model.rotation_counter,
         )
 
     # ── Session CRUD ──────────────────────────────────────
@@ -46,14 +44,12 @@ class AuthRepository:
         model = SessionModel(
             id=session.id,
             user_id=session.user_id,
-            refresh_token_hash=session.refresh_token_hash,
             device_info=session.device_info,
             ip_address=session.ip_address,
             created_at=session.created_at,
             expires_at=session.expires_at,
             revoked_at=session.revoked_at,
             previous_session_id=session.previous_session_id,
-            rotation_counter=session.rotation_counter,
         )
         self.session.add(model)
         await self.session.flush()
@@ -91,14 +87,12 @@ class AuthRepository:
         model = SessionModel(
             id=session.id,
             user_id=session.user_id,
-            refresh_token_hash=session.refresh_token_hash,
             device_info=session.device_info,
             ip_address=session.ip_address,
             created_at=session.created_at,
             expires_at=session.expires_at,
             revoked_at=session.revoked_at,
             previous_session_id=session.previous_session_id,
-            rotation_counter=session.rotation_counter,
         )
         merged = await self.session.merge(model)
         await self.session.flush()

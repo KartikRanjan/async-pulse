@@ -11,7 +11,6 @@ Authorization ("what you are allowed to do" — RBAC) lives in ``permissions.py`
 Service/repository wiring lives in ``dependencies.py``.
 """
 
-from datetime import datetime
 from typing import Annotated
 
 from fastapi import Depends
@@ -21,7 +20,7 @@ from jose import JWTError
 from src.core.cache import CacheClient, get_cache_client
 from src.core.settings import get_settings
 from src.modules.auth.dependencies import get_auth_repository
-from src.modules.auth.entities import UserSession
+from src.modules.auth.entities import SessionValidation
 from src.modules.auth.exceptions import InvalidTokenError
 from src.modules.auth.repository import AuthRepository
 from src.modules.users.dependencies import get_user_service
@@ -62,15 +61,23 @@ async def get_current_user(
     session_data = await cache.get_json(session_key)
 
     if session_data:
-        session = UserSession.from_dict(session_data)
+        session = SessionValidation.from_dict(session_data)
     else:
-        session = await auth_repo.get_session_by_id(session_id)
-        if session:
-            # Warm cache
+        full_session = await auth_repo.get_session_by_id(session_id)
+        if full_session:
+            session = SessionValidation.from_session(full_session)
+            # Warm cache with the validation projection only
             await cache.set_json(session_key, session.to_dict(), ttl=3600)
+        else:
+            session = None
 
     if not session or not session.is_active:
         raise InvalidTokenError("Session is invalid or has been logged out")
+
+    # Defence-in-depth: the session must belong to the user claimed by the token.
+    # Prevents a mismatched sid→sub pairing being accepted (cross-user session use).
+    if session.user_id != user_id:
+        raise InvalidTokenError("Session does not belong to this user")
 
     # 2. Retrieve user identity/status (Cache-aside: Redis -> DB).
     #
@@ -85,41 +92,33 @@ async def get_current_user(
     user_dict = await cache.get_json(user_key)
 
     if user_dict:
-        # Reconstruct User from cache data. The password hash is deliberately
-        # not cached (it is only needed at login), so it is left blank here.
+        # Reconstruct the User from the cached identity projection. Only the
+        # fields the auth gate and downstream RBAC need are cached
+        # (id, email, status, role); username/timestamps are profile metadata
+        # read straight from the DB when a route actually needs them, and the
+        # password hash is only needed at login. Blanks are safe here because
+        # no authenticated-path consumer reads them off ``current_user``.
         user = User(
             user_id=user_dict["id"],
             email=user_dict["email"],
-            username=user_dict["username"],
+            username="",
             hashed_password="",
             status=UserStatus(user_dict["status"]),
             role=UserRole(user_dict["role"]),
-            deleted_at=datetime.fromisoformat(user_dict["deleted_at"])
-            if user_dict.get("deleted_at")
-            else None,
-            created_at=datetime.fromisoformat(user_dict["created_at"])
-            if user_dict.get("created_at")
-            else None,
-            updated_at=datetime.fromisoformat(user_dict["updated_at"])
-            if user_dict.get("updated_at")
-            else None,
         )
     else:
         user = await user_service.get_user_by_id(user_id)
         if not user:
             raise InvalidTokenError("User profile not found")
-        # Warm cache (password hash intentionally excluded — not needed here)
+        # Warm cache with the minimal identity projection (matches the documented
+        # ``user:{uid}`` contract: id, email, status, role).
         await cache.set_json(
             user_key,
             {
                 "id": user.id,
                 "email": user.email,
-                "username": user.username,
                 "status": user.status,
                 "role": user.role,
-                "deleted_at": user.deleted_at.isoformat() if user.deleted_at else None,
-                "created_at": user.created_at.isoformat() if user.created_at else None,
-                "updated_at": user.updated_at.isoformat() if user.updated_at else None,
             },
             ttl=3600,
         )

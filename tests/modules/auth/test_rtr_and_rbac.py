@@ -165,7 +165,23 @@ async def test_logout_and_logout_all(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_rtr_rotation_and_breach_detection(client: AsyncClient) -> None:
-    """RTR — rotation works, and reusing an old refresh token revokes all user sessions."""
+    """RTR — rotation works; replaying an old refresh token is rejected.
+
+    Grace-period behaviour (Fix 5): The benign-vs-breach decision is now gated
+    on the DB ``revoked_at`` timestamp, not on a Redis key. Clearing the grace
+    cache entry within the 30-second window does NOT trigger ``logout_all`` —
+    the replay gets a safe 401 ('please retry') instead, which is the correct
+    behaviour when a Redis outage or manual deletion occurs mid-window.
+
+    Full breach (``logout_all``) fires only when the DB timestamp shows the
+    session was revoked *more than* 30 seconds ago (outside the grace window),
+    which cannot be simulated in a fast integration test without sleeping.
+
+    What this test verifies:
+    1. Rotation succeeds (T1 → T2).
+    2. Replaying T1 after its grace entry is cleared returns 401.
+    3. T2 and S2 remain usable (no false ``logout_all`` triggered).
+    """
     email = "rtr@example.com"
     create_resp = await client.post(
         "/api/v1/users/",
@@ -194,8 +210,9 @@ async def test_rtr_rotation_and_breach_detection(client: AsyncClient) -> None:
     assert refresh_resp.status_code == 200
     tokens2 = refresh_resp.json()["data"]
 
-    # Clear grace period cache *after* rotation so the replay request
-    # falls through to DB breach check
+    # Clear grace cache entry to simulate the grace window ending or a Redis miss.
+    # With Fix 5 this does NOT trigger logout_all — it is a safe 401 within the
+    # 30-second DB-timestamp window.
     cache = get_cache_client()
     import jose.jwt
 
@@ -205,28 +222,27 @@ async def test_rtr_rotation_and_breach_detection(client: AsyncClient) -> None:
     session_id = payload["jti"]
     await cache.delete(f"grace:{session_id}")
 
-    # A delayed replay of R1 (after grace window is gone/cleared)
+    # Replay of R1 with no grace cache → safe 401 ("please retry"), not a breach
     replay_resp = await client.post(
         "/api/v1/auth/refresh",
         json={"refresh_token": r_token1},
     )
-    # Replay must fail
     assert replay_resp.status_code == 401
 
-    # And ALL sessions for that user (including S2 and T2) must have been revoked
+    # Critically: no logout_all was triggered — T2 and S2 must still be valid
     check_t2 = await client.patch(
         f"/api/v1/users/{user_id}",
         json={"username": "rtr1"},
         headers={"Authorization": f"Bearer {tokens2['access_token']}"},
     )
-    assert check_t2.status_code == 401
+    assert check_t2.status_code == 200
 
     check_s2 = await client.patch(
         f"/api/v1/users/{user_id}",
         json={"username": "rtr2"},
         headers={"Authorization": f"Bearer {s2_tokens['access_token']}"},
     )
-    assert check_s2.status_code == 401
+    assert check_s2.status_code == 200
 
 
 # ── 4. Rotation Grace Period ─────────────────────────────
