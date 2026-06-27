@@ -4,8 +4,8 @@ Welcome, AI Agent! This document is your onboarding guide to the **AsyncPulse** 
 
 Before working on the codebase, please review the core documentation files in the `docs` directory:
 
-- **System Architecture & Design**: [DESIGN.md](file:///Users/kartikranjan/Desktop/Python/async-pulse/docs/architecture/DESIGN.md)
-- **Coding Style & Conventions**: [CODING_CONVENTIONS.md](file:///Users/kartikranjan/Desktop/Python/async-pulse/docs/standards/CODING_CONVENTIONS.md)
+- **System Architecture & Design**: [DESIGN.md](docs/architecture/DESIGN.md)
+- **Coding Style & Conventions**: [CODING_CONVENTIONS.md](docs/standards/CODING_CONVENTIONS.md)
 
 ---
 
