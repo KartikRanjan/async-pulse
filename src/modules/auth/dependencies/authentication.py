@@ -103,6 +103,7 @@ async def get_current_user(
             user_id=user_dict["id"],
             email=user_dict["email"],
             username="",
+            name="",
             hashed_password="",
             status=UserStatus(user_dict["status"]),
             role=UserRole(user_dict["role"]),

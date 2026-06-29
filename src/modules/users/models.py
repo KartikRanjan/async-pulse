@@ -29,6 +29,7 @@ class UserModel(Base):
         default=lambda: str(uuid.uuid4()),
     )
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=True)
     username: Mapped[str] = mapped_column(String(100), unique=True, index=True)
     hashed_password: Mapped[str] = mapped_column(String(255))
     status: Mapped[UserStatus] = mapped_column(

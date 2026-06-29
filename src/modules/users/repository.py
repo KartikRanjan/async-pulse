@@ -28,6 +28,7 @@ class UserRepository:
         return User(
             user_id=model.id,
             email=model.email,
+            name=model.name,
             username=model.username,
             hashed_password=model.hashed_password,
             status=model.status,
@@ -107,6 +108,7 @@ class UserRepository:
         *,
         user_id: str,
         email: str,
+        name: str,
         username: str,
         hashed_password: str,
         status: UserStatus = UserStatus.ACTIVE,
@@ -115,6 +117,7 @@ class UserRepository:
         model = UserModel(
             id=user_id,
             email=email,
+            name=name,
             username=username,
             hashed_password=hashed_password,
             status=status,

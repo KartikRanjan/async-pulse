@@ -6,14 +6,15 @@ but never exposed over HTTP.
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import ConfigDict, EmailStr, Field
 
 from src.modules.users.entities import UserRole, UserStatus
+from src.shared import CamelModel
 
 # ── Response schemas (public) ─────────────────────────────
 
 
-class UserRead(BaseModel):
+class UserRead(CamelModel):
     """Public user representation returned by the API."""
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
@@ -21,6 +22,7 @@ class UserRead(BaseModel):
     id: str
     email: EmailStr
     username: str
+    name: str
     status: UserStatus
     role: UserRole
     # Public field stays ``is_active``; sourced from the entity's renamed
@@ -34,15 +36,16 @@ class UserRead(BaseModel):
 # ── Request schemas (public) ──────────────────────────────
 
 
-class UserCreate(BaseModel):
+class UserCreate(CamelModel):
     """Payload for creating a new user."""
 
     email: EmailStr
-    username: str = Field(min_length=3, max_length=100)
+    name: str = Field(min_length=3, max_length=100)
+    username: str = Field(min_length=3, max_length=25)
     password: str = Field(min_length=8)
 
 
-class UserUpdate(BaseModel):
+class UserUpdate(CamelModel):
     """Payload for partial user update — all fields optional."""
 
     email: EmailStr | None = None

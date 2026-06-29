@@ -13,6 +13,7 @@ async def test_login_success(client: AsyncClient) -> None:
         json={
             "email": "auth@example.com",
             "username": "authuser",
+            "name": "Test User",
             "password": "securepass123",
         },
     )
@@ -29,9 +30,10 @@ async def test_login_success(client: AsyncClient) -> None:
     assert res_body["success"] is True
     assert res_body["message"] == "Login successful"
     data = res_body["data"]
-    assert "access_token" in data
-    assert "refresh_token" in data
-    assert data["token_type"] == "bearer"
+    token_pair = data["tokenPair"]
+    assert "accessToken" in token_pair
+    assert "refreshToken" in token_pair
+    assert token_pair["tokenType"] == "bearer"
 
 
 @pytest.mark.asyncio
@@ -42,6 +44,7 @@ async def test_login_invalid_credentials(client: AsyncClient) -> None:
         json={
             "email": "auth2@example.com",
             "username": "authuser2",
+            "name": "Test User",
             "password": "securepass123",
         },
     )
@@ -65,6 +68,7 @@ async def test_refresh_token(client: AsyncClient) -> None:
         json={
             "email": "refresh@example.com",
             "username": "refreshuser",
+            "name": "Test User",
             "password": "securepass123",
         },
     )
@@ -75,7 +79,7 @@ async def test_refresh_token(client: AsyncClient) -> None:
             "password": "securepass123",
         },
     )
-    refresh_token = login_resp.json()["data"]["refresh_token"]
+    refresh_token = login_resp.json()["data"]["tokenPair"]["refreshToken"]
 
     response = await client.post(
         "/api/v1/auth/refresh",
@@ -86,5 +90,5 @@ async def test_refresh_token(client: AsyncClient) -> None:
     assert res_body["success"] is True
     assert res_body["message"] == "Token refreshed successfully"
     data = res_body["data"]
-    assert "access_token" in data
-    assert "refresh_token" in data
+    assert "accessToken" in data
+    assert "refreshToken" in data

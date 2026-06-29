@@ -2,3 +2,7 @@
 
 Nothing in this package may import from ``src.modules``.
 """
+
+from src.shared.schemas import CamelModel
+
+__all__ = ["CamelModel"]

@@ -15,7 +15,7 @@ from src.db.unit_of_work import UnitOfWork
 from src.modules.auth.entities import SessionValidation, UserSession
 from src.modules.auth.exceptions import InvalidCredentialsError, InvalidTokenError
 from src.modules.auth.repository import AuthRepository
-from src.modules.auth.schemas import TokenPair, TokenRefreshRequest
+from src.modules.auth.schemas import LoginResponse, TokenPair, TokenRefreshRequest, UserInfo
 from src.modules.users.entities import UserStatus
 from src.modules.users.exceptions import UserBannedError, UserSuspendedError
 from src.modules.users.service import UserService
@@ -57,7 +57,7 @@ class AuthService:
         password: str,
         device_info: str | None = None,
         ip_address: str | None = None,
-    ) -> TokenPair:
+    ) -> LoginResponse:
         """Verify login credentials and issue a new session with rotated tokens."""
         user = await self.users.get_user_by_email(email)
         if not user or not verify_password(password, user.hashed_password):
@@ -106,9 +106,18 @@ class AuthService:
                 ttl=self.settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400,
             )
 
-        return TokenPair(
-            access_token=access_token,
-            refresh_token=refresh_token,
+        return LoginResponse(
+            token_pair=TokenPair(
+                access_token=access_token,
+                refresh_token=refresh_token,
+            ),
+            user_info=UserInfo(
+                user_id=user.id,
+                email=user.email,
+                name=user.name,
+                username=user.username,
+                role=str(user.role),
+            ),
         )
 
     async def refresh_token(

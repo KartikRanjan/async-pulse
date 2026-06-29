@@ -30,6 +30,7 @@ def _make_user(**overrides: object) -> User:
         "user_id": "user-1",
         "email": "alice@example.com",
         "username": "alice",
+        "name": "Alice",
         "hashed_password": "hashed",
         "status": UserStatus.ACTIVE,
         "role": UserRole.USER,
@@ -74,7 +75,9 @@ async def test_create_user_success(service: UserService, repo: AsyncMock, uow: A
     created = _make_user()
     repo.create.return_value = created
 
-    payload = UserCreate(email="alice@example.com", username="alice", password="securepass123")
+    payload = UserCreate(
+        email="alice@example.com", username="alice", name="Alice", password="securepass123"
+    )
     result = await service.create_user(payload)
 
     assert result is created
@@ -86,7 +89,9 @@ async def test_create_user_duplicate_email(service: UserService, repo: AsyncMock
     """A conflicting email raises UserAlreadyExistsError and never commits."""
     repo.get_by_email_or_username.return_value = _make_user(email="alice@example.com")
 
-    payload = UserCreate(email="alice@example.com", username="different", password="securepass123")
+    payload = UserCreate(
+        email="alice@example.com", username="different", name="Alice", password="securepass123"
+    )
     with pytest.raises(UserAlreadyExistsError, match="email"):
         await service.create_user(payload)
 
@@ -97,7 +102,9 @@ async def test_create_user_duplicate_username(service: UserService, repo: AsyncM
         email="other@example.com", username="alice"
     )
 
-    payload = UserCreate(email="new@example.com", username="alice", password="securepass123")
+    payload = UserCreate(
+        email="new@example.com", username="alice", name="Alice", password="securepass123"
+    )
     with pytest.raises(UserAlreadyExistsError, match="username"):
         await service.create_user(payload)
 

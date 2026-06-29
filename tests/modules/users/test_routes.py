@@ -14,6 +14,7 @@ async def test_create_user(client: AsyncClient) -> None:
     payload = {
         "email": "alice@example.com",
         "username": "alice",
+        "name": "Alice",
         "password": "securepass123",
     }
     response = await client.post("/api/v1/users/", json=payload)
@@ -24,7 +25,7 @@ async def test_create_user(client: AsyncClient) -> None:
     data = res_body["data"]
     assert data["email"] == "alice@example.com"
     assert data["username"] == "alice"
-    assert data["is_active"] is True
+    assert data["isActive"] is True
     assert "id" in data
 
 
@@ -34,6 +35,7 @@ async def test_create_user_duplicate_email(client: AsyncClient) -> None:
     payload = {
         "email": "bob@example.com",
         "username": "bob",
+        "name": "Bob",
         "password": "securepass123",
     }
     resp1 = await client.post("/api/v1/users/", json=payload)
@@ -42,6 +44,7 @@ async def test_create_user_duplicate_email(client: AsyncClient) -> None:
     payload2 = {
         "email": "bob@example.com",
         "username": "bob2",
+        "name": "Bob Two",
         "password": "securepass123",
     }
     resp2 = await client.post("/api/v1/users/", json=payload2)
@@ -58,6 +61,7 @@ async def test_list_users(client: AsyncClient) -> None:
             json={
                 "email": f"user{i}@example.com",
                 "username": f"user{i}",
+                "name": f"User {i}",
                 "password": "securepass123",
             },
         )
@@ -82,6 +86,7 @@ async def test_get_user(client: AsyncClient) -> None:
         json={
             "email": "charlie@example.com",
             "username": "charlie",
+            "name": "Charlie",
             "password": "securepass123",
         },
     )
@@ -98,7 +103,10 @@ async def test_get_user(client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_get_user_not_found(client: AsyncClient) -> None:
     """GET /api/v1/users/{id} — nonexistent ID should return standardized 404 envelope."""
-    response = await client.get("/api/v1/users/nonexistent-id")
+    import uuid
+
+    nonexistent_uuid = str(uuid.uuid4())
+    response = await client.get(f"/api/v1/users/{nonexistent_uuid}")
     assert response.status_code == 404
     data = response.json()
     assert data["success"] is False
@@ -106,6 +114,18 @@ async def test_get_user_not_found(client: AsyncClient) -> None:
     assert "message" in data
     assert "timestamp" in data
     assert "errors" not in data  # Should be omitted when empty
+
+
+@pytest.mark.asyncio
+async def test_get_user_invalid_uuid_format(client: AsyncClient) -> None:
+    """GET /api/v1/users/{id} — malformed UUID should return standardized 422 envelope."""
+    response = await client.get("/api/v1/users/nonexistent-id")
+    assert response.status_code == 422
+    data = response.json()
+    assert data["success"] is False
+    assert data["errorCode"] == "VALIDATION_FAILED"
+    assert "message" in data
+    assert "errors" in data
 
 
 @pytest.mark.asyncio
@@ -117,6 +137,7 @@ async def test_update_user(client: AsyncClient) -> None:
         json={
             "email": "dave@example.com",
             "username": "dave",
+            "name": "Dave",
             "password": "securepass123",
         },
     )
@@ -127,7 +148,7 @@ async def test_update_user(client: AsyncClient) -> None:
         "/api/v1/auth/login",
         json={"email": "dave@example.com", "password": "securepass123"},
     )
-    token = login_resp.json()["data"]["access_token"]
+    token = login_resp.json()["data"]["tokenPair"]["accessToken"]
 
     # Update with auth
     response = await client.patch(
@@ -153,6 +174,7 @@ async def test_delete_user_requires_superuser(
         json={
             "email": "eve@example.com",
             "username": "eve",
+            "name": "Eve",
             "password": "securepass123",
         },
     )
@@ -163,7 +185,7 @@ async def test_delete_user_requires_superuser(
         "/api/v1/auth/login",
         json={"email": "eve@example.com", "password": "securepass123"},
     )
-    token = login_resp.json()["data"]["access_token"]
+    token = login_resp.json()["data"]["tokenPair"]["accessToken"]
 
     # Regular user cannot delete — should return 403
     response = await client.delete(
@@ -182,6 +204,7 @@ async def test_delete_user_as_superuser(client: AsyncClient, db_session: AsyncSe
         json={
             "email": "victim@example.com",
             "username": "victim",
+            "name": "Victim",
             "password": "securepass123",
         },
     )
@@ -193,6 +216,7 @@ async def test_delete_user_as_superuser(client: AsyncClient, db_session: AsyncSe
         json={
             "email": "admin@example.com",
             "username": "admin",
+            "name": "Admin",
             "password": "securepass123",
         },
     )
@@ -213,7 +237,7 @@ async def test_delete_user_as_superuser(client: AsyncClient, db_session: AsyncSe
         "/api/v1/auth/login",
         json={"email": "admin@example.com", "password": "securepass123"},
     )
-    admin_token = login_resp.json()["data"]["access_token"]
+    admin_token = login_resp.json()["data"]["tokenPair"]["accessToken"]
 
     # Delete with superuser auth — should soft-delete (204)
     response = await client.delete(
@@ -242,6 +266,7 @@ async def test_delete_user_unauthenticated(client: AsyncClient) -> None:
         json={
             "email": "anon@example.com",
             "username": "anon",
+            "name": "Anon",
             "password": "securepass123",
         },
     )

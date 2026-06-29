@@ -71,6 +71,7 @@ class UserService:
         user = await self.repo.create(
             user_id=str(uuid.uuid4()),
             email=payload.email,
+            name=payload.name,
             username=payload.username,
             hashed_password=hash_password(payload.password),
             status=UserStatus.ACTIVE,

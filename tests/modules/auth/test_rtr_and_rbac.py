@@ -21,6 +21,7 @@ def test_user_status_state_machine_valid_transitions() -> None:
         user_id="test-id",
         email="test@example.com",
         username="testuser",
+        name="testuser",
         hashed_password="hashed_password",
         status=UserStatus.PENDING_VERIFICATION,
     )
@@ -48,6 +49,7 @@ def test_user_status_state_machine_invalid_transitions() -> None:
         user_id="test-id",
         email="test@example.com",
         username="testuser",
+        name="testuser",
         hashed_password="hashed_password",
         status=UserStatus.BANNED,
     )
@@ -67,7 +69,12 @@ async def test_session_device_limits(client: AsyncClient) -> None:
     email = "limit@example.com"
     create_resp = await client.post(
         "/api/v1/users/",
-        json={"email": email, "username": "limituser", "password": "securepass123"},
+        json={
+            "email": email,
+            "username": "limituser",
+            "name": "Limit User",
+            "password": "securepass123",
+        },
     )
     user_id = create_resp.json()["data"]["id"]
 
@@ -80,10 +87,10 @@ async def test_session_device_limits(client: AsyncClient) -> None:
             headers={"User-Agent": f"Device-{i}"},
         )
         assert resp.status_code == 200
-        sessions.append(resp.json()["data"])
+        sessions.append(resp.json()["data"]["tokenPair"])
 
     # First session (sessions[0]) access token should now be invalid/revoked
-    first_token = sessions[0]["access_token"]
+    first_token = sessions[0]["accessToken"]
     protected_resp = await client.patch(
         f"/api/v1/users/{user_id}",
         json={"username": "newlimit"},
@@ -92,7 +99,7 @@ async def test_session_device_limits(client: AsyncClient) -> None:
     assert protected_resp.status_code == 401
 
     # Last session (sessions[5]) should be active and valid
-    last_token = sessions[5]["access_token"]
+    last_token = sessions[5]["accessToken"]
     protected_resp = await client.patch(
         f"/api/v1/users/{user_id}",
         json={"username": "newlimit2"},
@@ -107,7 +114,12 @@ async def test_logout_and_logout_all(client: AsyncClient) -> None:
     email = "logout@example.com"
     create_resp = await client.post(
         "/api/v1/users/",
-        json={"email": email, "username": "logoutuser", "password": "securepass123"},
+        json={
+            "email": email,
+            "username": "logoutuser",
+            "name": "Logout User",
+            "password": "securepass123",
+        },
     )
     user_id = create_resp.json()["data"]["id"]
 
@@ -118,13 +130,13 @@ async def test_logout_and_logout_all(client: AsyncClient) -> None:
     resp2 = await client.post(
         "/api/v1/auth/login", json={"email": email, "password": "securepass123"}
     )
-    tokens1 = resp1.json()["data"]
-    tokens2 = resp2.json()["data"]
+    tokens1 = resp1.json()["data"]["tokenPair"]
+    tokens2 = resp2.json()["data"]["tokenPair"]
 
     # Logout session 1
     logout_resp = await client.post(
         "/api/v1/auth/logout",
-        headers={"Authorization": f"Bearer {tokens1['access_token']}"},
+        headers={"Authorization": f"Bearer {tokens1['accessToken']}"},
     )
     assert logout_resp.status_code == 204
 
@@ -132,7 +144,7 @@ async def test_logout_and_logout_all(client: AsyncClient) -> None:
     check1 = await client.patch(
         f"/api/v1/users/{user_id}",
         json={"username": "logout1"},
-        headers={"Authorization": f"Bearer {tokens1['access_token']}"},
+        headers={"Authorization": f"Bearer {tokens1['accessToken']}"},
     )
     assert check1.status_code == 401
 
@@ -140,14 +152,14 @@ async def test_logout_and_logout_all(client: AsyncClient) -> None:
     check2 = await client.patch(
         f"/api/v1/users/{user_id}",
         json={"username": "logout2"},
-        headers={"Authorization": f"Bearer {tokens2['access_token']}"},
+        headers={"Authorization": f"Bearer {tokens2['accessToken']}"},
     )
     assert check2.status_code == 200
 
     # Logout all
     logout_all_resp = await client.post(
         "/api/v1/auth/logout-all",
-        headers={"Authorization": f"Bearer {tokens2['access_token']}"},
+        headers={"Authorization": f"Bearer {tokens2['accessToken']}"},
     )
     assert logout_all_resp.status_code == 204
 
@@ -155,7 +167,7 @@ async def test_logout_and_logout_all(client: AsyncClient) -> None:
     check2_after = await client.patch(
         f"/api/v1/users/{user_id}",
         json={"username": "logout3"},
-        headers={"Authorization": f"Bearer {tokens2['access_token']}"},
+        headers={"Authorization": f"Bearer {tokens2['accessToken']}"},
     )
     assert check2_after.status_code == 401
 
@@ -185,7 +197,12 @@ async def test_rtr_rotation_and_breach_detection(client: AsyncClient) -> None:
     email = "rtr@example.com"
     create_resp = await client.post(
         "/api/v1/users/",
-        json={"email": email, "username": "rtruser", "password": "securepass123"},
+        json={
+            "email": email,
+            "username": "rtruser",
+            "name": "RTR User",
+            "password": "securepass123",
+        },
     )
     user_id = create_resp.json()["data"]["id"]
 
@@ -193,14 +210,14 @@ async def test_rtr_rotation_and_breach_detection(client: AsyncClient) -> None:
     login_resp = await client.post(
         "/api/v1/auth/login", json={"email": email, "password": "securepass123"}
     )
-    tokens1 = login_resp.json()["data"]
-    r_token1 = tokens1["refresh_token"]
+    tokens1 = login_resp.json()["data"]["tokenPair"]
+    r_token1 = tokens1["refreshToken"]
 
     # Also log in from another device (S2)
     s2_login_resp = await client.post(
         "/api/v1/auth/login", json={"email": email, "password": "securepass123"}
     )
-    s2_tokens = s2_login_resp.json()["data"]
+    s2_tokens = s2_login_resp.json()["data"]["tokenPair"]
 
     # Rotate T1 -> T2
     refresh_resp = await client.post(
@@ -233,14 +250,14 @@ async def test_rtr_rotation_and_breach_detection(client: AsyncClient) -> None:
     check_t2 = await client.patch(
         f"/api/v1/users/{user_id}",
         json={"username": "rtr1"},
-        headers={"Authorization": f"Bearer {tokens2['access_token']}"},
+        headers={"Authorization": f"Bearer {tokens2['accessToken']}"},
     )
     assert check_t2.status_code == 200
 
     check_s2 = await client.patch(
         f"/api/v1/users/{user_id}",
         json={"username": "rtr2"},
-        headers={"Authorization": f"Bearer {s2_tokens['access_token']}"},
+        headers={"Authorization": f"Bearer {s2_tokens['accessToken']}"},
     )
     assert check_s2.status_code == 200
 
@@ -254,14 +271,19 @@ async def test_rtr_rotation_grace_period(client: AsyncClient) -> None:
     email = "grace@example.com"
     await client.post(
         "/api/v1/users/",
-        json={"email": email, "username": "graceuser", "password": "securepass123"},
+        json={
+            "email": email,
+            "username": "graceuser",
+            "name": "Grace User",
+            "password": "securepass123",
+        },
     )
 
     login_resp = await client.post(
         "/api/v1/auth/login", json={"email": email, "password": "securepass123"}
     )
-    tokens = login_resp.json()["data"]
-    r_token = tokens["refresh_token"]
+    tokens = login_resp.json()["data"]["tokenPair"]
+    r_token = tokens["refreshToken"]
 
     # Send first refresh request
     resp1 = await client.post(
@@ -279,8 +301,8 @@ async def test_rtr_rotation_grace_period(client: AsyncClient) -> None:
     # Should succeed and return the exact same access & refresh tokens
     assert resp2.status_code == 200
     res2_data = resp2.json()["data"]
-    assert res1_data["access_token"] == res2_data["access_token"]
-    assert res1_data["refresh_token"] == res2_data["refresh_token"]
+    assert res1_data["accessToken"] == res2_data["accessToken"]
+    assert res1_data["refreshToken"] == res2_data["refreshToken"]
 
 
 # ── 5. Hierarchical RBAC ─────────────────────────────────
@@ -295,6 +317,7 @@ async def test_hierarchical_rbac_delete_user(client: AsyncClient, db_session: As
         json={
             "email": "victim-rbac@example.com",
             "username": "victimrbac",
+            "name": "Victim",
             "password": "securepass123",
         },
     )
@@ -306,6 +329,7 @@ async def test_hierarchical_rbac_delete_user(client: AsyncClient, db_session: As
         json={
             "email": "tester-rbac@example.com",
             "username": "testerrbac",
+            "name": "Tester",
             "password": "securepass123",
         },
     )
@@ -316,7 +340,7 @@ async def test_hierarchical_rbac_delete_user(client: AsyncClient, db_session: As
         "/api/v1/auth/login",
         json={"email": "tester-rbac@example.com", "password": "securepass123"},
     )
-    user_token = login_resp.json()["data"]["access_token"]
+    user_token = login_resp.json()["data"]["tokenPair"]["accessToken"]
 
     # 1. USER role tries to delete -> 403 Forbidden
     del_resp1 = await client.delete(

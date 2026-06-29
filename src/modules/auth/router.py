@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, Request, Response
 
 from src.core.settings import get_settings
 from src.modules.auth.dependencies import get_auth_service, get_current_user, oauth2_scheme
-from src.modules.auth.schemas import LoginRequest, TokenPair, TokenRefreshRequest
+from src.modules.auth.schemas import LoginRequest, LoginResponse, TokenPair, TokenRefreshRequest
 from src.modules.auth.service import AuthService
 from src.modules.users.entities import User
 from src.shared.logger import get_logger
@@ -49,13 +49,13 @@ def _clear_refresh_cookie(response: Response) -> None:
     )
 
 
-@router.post("/login", response_model=SuccessResponse[TokenPair])
+@router.post("/login", response_model=SuccessResponse[LoginResponse])
 async def login(
     payload: LoginRequest,
     service: AuthServiceDep,
     request: Request,
     response: Response,
-) -> SuccessResponse[TokenPair]:
+) -> SuccessResponse[LoginResponse]:
     """Authenticate a user and return a JWT token pair, creating a session.
 
     The refresh token is set as an httpOnly cookie AND returned in the body
@@ -64,17 +64,17 @@ async def login(
     device_info = request.headers.get("User-Agent")
     ip_address = request.client.host if request.client else None
 
-    token_pair = await service.authenticate(
+    data = await service.authenticate(
         payload.email,
         payload.password,
         device_info=device_info,
         ip_address=ip_address,
     )
 
-    _set_refresh_cookie(response, token_pair.refresh_token)
+    _set_refresh_cookie(response, data.token_pair.refresh_token)
 
     return SuccessResponse(
-        data=token_pair,
+        data=data,
         message="Login successful",
     )
 

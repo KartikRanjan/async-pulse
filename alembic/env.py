@@ -88,9 +88,6 @@ async def run_async_migrations() -> None:
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
         connect_args={
-            "server_settings": {
-                "search_path": f'"{settings.DB_SCHEMA}",public',
-            },
             "statement_cache_size": 0,
         },
     )

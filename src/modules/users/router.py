@@ -5,6 +5,7 @@ All domain exceptions are caught by the central handler in
 """
 
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends
 
@@ -56,11 +57,11 @@ async def list_users(
 
 @router.get("/{user_id}", response_model=SuccessResponse[UserRead])
 async def get_user(
-    user_id: str,
+    user_id: UUID,
     service: UserServiceDep,
 ) -> SuccessResponse[UserRead]:
     """Get a user by ID."""
-    user = await service.get_user(user_id)
+    user = await service.get_user(str(user_id))
     return SuccessResponse(
         data=UserRead.model_validate(user),
         message="User retrieved successfully",
@@ -69,16 +70,17 @@ async def get_user(
 
 @router.patch("/{user_id}", response_model=SuccessResponse[UserRead])
 async def update_user(
-    user_id: str,
+    user_id: UUID,
     payload: UserUpdate,
     service: UserServiceDep,
     current_user: CurrentUserDep,
 ) -> SuccessResponse[UserRead]:
     """Update a user. Requires profile ownership or superuser privileges."""
-    if current_user.id != user_id and current_user.role != UserRole.SUPERUSER:
+    user_id_str = str(user_id)
+    if current_user.id != user_id_str and current_user.role != UserRole.SUPERUSER:
         raise InsufficientPermissionsError("Cannot update other users' profile")
 
-    user = await service.update_user(user_id, payload, current_user_id=current_user.id)
+    user = await service.update_user(user_id_str, payload, current_user_id=current_user.id)
     return SuccessResponse(
         data=UserRead.model_validate(user),
         message="User updated successfully",
@@ -87,9 +89,9 @@ async def update_user(
 
 @router.delete("/{user_id}", status_code=204)
 async def delete_user(
-    user_id: str,
+    user_id: UUID,
     service: UserServiceDep,
     _current_user: User = Depends(require_role(UserRole.SUPERUSER)),  # noqa: B008
 ) -> None:
     """Soft-delete a user. Requires superuser privileges."""
-    await service.delete_user(user_id)
+    await service.delete_user(str(user_id))

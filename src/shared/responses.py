@@ -7,24 +7,15 @@ a consistent ``{ success, message, data }`` (or error) shape.
 from datetime import UTC, datetime
 from typing import Any
 
-from pydantic import AliasGenerator, BaseModel, ConfigDict, Field
-from pydantic.alias_generators import to_camel
+from pydantic import Field
 
-# ── Shared config ─────────────────────────────────────────
-
-_RESPONSE_CONFIG = ConfigDict(
-    alias_generator=AliasGenerator(serialization_alias=to_camel),
-    populate_by_name=True,
-)
-
+from src.shared.schemas import CamelModel
 
 # ── Response models ──────────────────────────────────────
 
 
-class SuccessResponse[T](BaseModel):
+class SuccessResponse[T](CamelModel):
     """Envelope for successful responses."""
-
-    model_config = _RESPONSE_CONFIG
 
     success: bool = True
     message: str
@@ -34,10 +25,8 @@ class SuccessResponse[T](BaseModel):
     )
 
 
-class ErrorResponse(BaseModel):
+class ErrorResponse(CamelModel):
     """Envelope for error responses."""
-
-    model_config = _RESPONSE_CONFIG
 
     success: bool = False
     message: str

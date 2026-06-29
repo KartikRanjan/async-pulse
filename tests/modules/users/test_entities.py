@@ -18,6 +18,7 @@ def _make_user(**overrides: object) -> User:
         "user_id": "user-1",
         "email": "alice@example.com",
         "username": "alice",
+        "name": "Alice",
         "hashed_password": "hashed",
     }
     defaults.update(overrides)

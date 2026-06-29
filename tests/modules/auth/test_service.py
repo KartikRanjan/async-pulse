@@ -30,6 +30,7 @@ def _make_user(**overrides: object) -> User:
         "user_id": "user-1",
         "email": "alice@example.com",
         "username": "alice",
+        "name": "Alice",
         "hashed_password": hash_password(PLAIN_PASSWORD),
         "status": UserStatus.ACTIVE,
         "role": UserRole.USER,
@@ -112,8 +113,8 @@ async def test_authenticate_success_creates_session(
         "alice@example.com", PLAIN_PASSWORD, device_info="pytest", ip_address="127.0.0.1"
     )
 
-    assert tokens.access_token
-    assert tokens.refresh_token
+    assert tokens.token_pair.access_token
+    assert tokens.token_pair.refresh_token
     repo.create_session.assert_awaited_once()
     uow.commit.assert_awaited_once()
 
