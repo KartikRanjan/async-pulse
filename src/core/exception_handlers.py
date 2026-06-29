@@ -8,10 +8,14 @@ import re
 from functools import lru_cache
 
 from fastapi import HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from src.shared.exceptions import AppError
+from src.shared.logger import get_logger
 from src.shared.responses import error_response
+
+logger = get_logger(__name__)
 
 
 @lru_cache(maxsize=1)
@@ -57,3 +61,29 @@ async def app_error_handler(_request: Request, exc: Exception) -> JSONResponse:
 
     content = error_response(message=exc.message, error_code=error_code)
     return JSONResponse(status_code=exc.status_code, content=content)
+
+
+async def validation_exception_handler(_request: Request, exc: Exception) -> JSONResponse:
+    """Handle FastAPI input validation errors with standardized error envelope."""
+    if not isinstance(exc, RequestValidationError):  # pragma: no cover
+        raise exc
+    content = error_response(
+        message="Validation failed",
+        error_code="VALIDATION_FAILED",
+        errors=list(exc.errors()),
+    )
+    return JSONResponse(status_code=422, content=content)
+
+
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Handle uncaught exceptions with standardized 500 response and server log."""
+    logger.exception(
+        "Unhandled exception occurred",
+        path=request.url.path,
+        method=request.method,
+    )
+    content = error_response(
+        message="An unexpected error occurred",
+        error_code="INTERNAL_SERVER_ERROR",
+    )
+    return JSONResponse(status_code=500, content=content)

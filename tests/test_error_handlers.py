@@ -1,0 +1,57 @@
+from collections.abc import AsyncGenerator
+from unittest.mock import patch
+
+import pytest
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.db.session import get_async_session
+from src.main import app
+
+
+@pytest.mark.asyncio
+async def test_validation_error(client: AsyncClient) -> None:
+    """POST /api/v1/users/ with invalid payload should return 422 validation envelope."""
+    response = await client.post(
+        "/api/v1/users/",
+        json={
+            "email": "not-an-email",
+            "username": "ch",  # too short (min 3)
+            # password missing
+        },
+    )
+    assert response.status_code == 422
+    data = response.json()
+    assert data["success"] is False
+    assert data["errorCode"] == "VALIDATION_FAILED"
+    assert "message" in data
+    assert "timestamp" in data
+    assert "errors" in data
+    assert isinstance(data["errors"], list)
+    assert len(data["errors"]) > 0
+
+
+@pytest.mark.asyncio
+async def test_unhandled_exception(db_session: AsyncSession) -> None:
+    """Verify that any unhandled generic Exception returns standardized 500 envelope."""
+
+    async def _override_session() -> AsyncGenerator[AsyncSession, None]:
+        yield db_session
+
+    app.dependency_overrides[get_async_session] = _override_session
+    transport = ASGITransport(app=app, raise_app_exceptions=False)
+
+    async with AsyncClient(transport=transport, base_url="http://test") as custom_client:
+        with patch("src.modules.users.service.UserService.get_user") as mock_get_user:
+            mock_get_user.side_effect = RuntimeError("Simulated internal database failure")
+            response = await custom_client.get("/api/v1/users/00000000-0000-0000-0000-000000000000")
+
+            assert response.status_code == 500
+            data = response.json()
+            assert data["success"] is False
+            assert data["errorCode"] == "INTERNAL_SERVER_ERROR"
+            assert data["message"] == "An unexpected error occurred"
+            assert "timestamp" in data
+            assert "errors" not in data  # Should be omitted when empty
+
+    app.dependency_overrides.clear()
