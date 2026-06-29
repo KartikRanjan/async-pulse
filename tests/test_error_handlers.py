@@ -29,6 +29,14 @@ async def test_validation_error(client: AsyncClient) -> None:
     assert "errors" in data
     assert isinstance(data["errors"], list)
     assert len(data["errors"]) > 0
+    for err in data["errors"]:
+        assert "field" in err
+        assert "message" in err
+        assert "rule" in err
+    fields = [err["field"] for err in data["errors"]]
+    assert "email" in fields
+    assert "username" in fields
+    assert "password" in fields
 
 
 @pytest.mark.asyncio
