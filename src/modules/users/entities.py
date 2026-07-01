@@ -45,6 +45,7 @@ class User:
         user_id: str,
         email: str,
         username: str,
+        name: str,
         hashed_password: str,
         status: UserStatus = UserStatus.ACTIVE,
         role: UserRole = UserRole.USER,
@@ -55,6 +56,7 @@ class User:
         self.id = user_id
         self.email = email
         self.username = username
+        self.name = name
         self.hashed_password = hashed_password
         self.status = status
         self.role = role

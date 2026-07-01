@@ -40,6 +40,7 @@ def add_starlette_error_middleware(app: FastAPI) -> None:
         call_next: RequestResponseEndpoint,
     ) -> Response:
         response = await call_next(request)
+
         if response.status_code == 404:
             path = request.url.path
             return JSONResponse(
