@@ -6,6 +6,7 @@ Register once in ``main.py`` via ``app.add_exception_handler(AppError, app_error
 import http
 import re
 from functools import lru_cache
+from typing import Any
 
 from fastapi import HTTPException, Request
 from fastapi.exceptions import RequestValidationError
@@ -68,32 +69,19 @@ async def validation_exception_handler(_request: Request, exc: Exception) -> JSO
     if not isinstance(exc, RequestValidationError):  # pragma: no cover
         raise exc
 
-    from typing import Any, cast
-
     tailored_errors: list[dict[str, Any]] = []
-    errors_list = exc.errors()
-    if isinstance(errors_list, list):
-        for error_item in errors_list:
-            if isinstance(error_item, dict):
-                error = cast("dict[str, object]", error_item)
-                loc_val = error.get("loc")
-                loc = (
-                    cast("list[object] | tuple[object, ...]", loc_val)
-                    if isinstance(loc_val, (list, tuple))
-                    else []
-                )
-                field_path = (
-                    ".".join(str(x) for x in loc[1:])
-                    if len(loc) > 1
-                    else ".".join(str(x) for x in loc)
-                )
-                tailored_errors.append(
-                    {
-                        "field": field_path,
-                        "message": str(error.get("msg") or "Invalid value"),
-                        "rule": str(error.get("type") or "invalid"),
-                    }
-                )
+    for error in exc.errors():
+        loc = error.get("loc", ())
+        field_path = (
+            ".".join(str(x) for x in loc[1:]) if len(loc) > 1 else ".".join(str(x) for x in loc)
+        )
+        tailored_errors.append(
+            {
+                "field": field_path,
+                "message": str(error.get("msg") or "Invalid value"),
+                "rule": str(error.get("type") or "invalid"),
+            }
+        )
 
     content = error_response(
         message="Validation failed",

@@ -1,5 +1,4 @@
 from collections.abc import AsyncGenerator
-from unittest.mock import patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -7,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.session import get_async_session
 from src.main import app
+from src.modules.users.dependencies import get_user_service
 
 
 @pytest.mark.asyncio
@@ -39,6 +39,23 @@ async def test_validation_error(client: AsyncClient) -> None:
     assert "password" in fields
 
 
+class _BrokenUserService:
+    """Stand-in for ``UserService`` that fails every call.
+
+    Only implements the public methods exercised by the router — used to
+    simulate an internal failure via the public dependency interface rather
+    than patching ``UserService`` internals.
+    """
+
+    async def get_user(self, user_id: str) -> object:
+        """Simulate an internal failure when fetching a user."""
+        raise RuntimeError("Simulated internal database failure")
+
+
+async def _broken_user_service() -> _BrokenUserService:
+    return _BrokenUserService()
+
+
 @pytest.mark.asyncio
 async def test_unhandled_exception(db_session: AsyncSession) -> None:
     """Verify that any unhandled generic Exception returns standardized 500 envelope."""
@@ -47,19 +64,18 @@ async def test_unhandled_exception(db_session: AsyncSession) -> None:
         yield db_session
 
     app.dependency_overrides[get_async_session] = _override_session
+    app.dependency_overrides[get_user_service] = _broken_user_service
     transport = ASGITransport(app=app, raise_app_exceptions=False)
 
     async with AsyncClient(transport=transport, base_url="http://test") as custom_client:
-        with patch("src.modules.users.service.UserService.get_user") as mock_get_user:
-            mock_get_user.side_effect = RuntimeError("Simulated internal database failure")
-            response = await custom_client.get("/api/v1/users/00000000-0000-0000-0000-000000000000")
+        response = await custom_client.get("/api/v1/users/00000000-0000-0000-0000-000000000000")
 
-            assert response.status_code == 500
-            data = response.json()
-            assert data["success"] is False
-            assert data["errorCode"] == "INTERNAL_SERVER_ERROR"
-            assert data["message"] == "An unexpected error occurred"
-            assert "timestamp" in data
-            assert "errors" not in data  # Should be omitted when empty
+        assert response.status_code == 500
+        data = response.json()
+        assert data["success"] is False
+        assert data["errorCode"] == "INTERNAL_SERVER_ERROR"
+        assert data["message"] == "An unexpected error occurred"
+        assert "timestamp" in data
+        assert "errors" not in data  # Should be omitted when empty
 
     app.dependency_overrides.clear()
